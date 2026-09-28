@@ -12,7 +12,7 @@ from scanner import run_stock_scan
 
 # 페이지 기본 설정
 st.set_page_config(
-    page_title="네이버 증권 바닥 반등 유망주 발굴기",
+    page_title="갓성호님의 바닥에서 난 잡아",
     page_icon="📈",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -55,7 +55,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-st.markdown('<div class="main-title">📊 네이버 증권 바닥권 반등 유망주 발굴기</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">📊 갓성호님의 바닥에서 난 잡아</div>', unsafe_allow_html=True)
 st.markdown('<div class="sub-title">단순한 낙주가 아닌 <b>[52주 최저가/과매도 바닥 + 외인/기관 수급 + 거래량 급증 + 저평가 밸류]</b>가 결합된 <b>상승 반등 유력 종목</b>을 탐색합니다.</div>', unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
@@ -115,7 +115,6 @@ if start_scan:
 df = st.session_state.scan_data
 
 if df is not None and not df.empty:
-    # 사용자 사이드바 필터 적용
     filtered_df = df[df['total_score'] >= min_score].copy()
     filtered_df = filtered_df[filtered_df['diff_from_52w_low_pct'] <= max_diff_low]
     
@@ -132,7 +131,6 @@ if df is not None and not df.empty:
 
     st.markdown(f"### 🎯 조건 만족 종목 ({len(filtered_df)}건)")
 
-    # 주요 지표 요약 메트릭
     m_col1, m_col2, m_col3, m_col4 = st.columns(4)
     with m_col1:
         st.metric("발굴된 종목 수", f"{len(filtered_df)} 개")
@@ -146,7 +144,6 @@ if df is not None and not df.empty:
         vol_surge_cnt = len(filtered_df[filtered_df['vol_surge_ratio'] >= 1.5])
         st.metric("거래량 급증(1.5배+) 종목", f"{vol_surge_cnt} 개")
 
-    # 결과 테이블 뷰
     table_display = filtered_df.copy()
     table_display['52주 최저가 이격률'] = table_display['diff_from_52w_low_pct'].apply(lambda x: f"+{x:.1f}%")
     table_display['52주 최고가 낙폭'] = table_display['fall_from_52w_high_pct'].apply(lambda x: f"{x:.1f}%")
@@ -177,7 +174,6 @@ if df is not None and not df.empty:
         hide_index=True
     )
 
-    # 엑셀 다운로드 버튼
     csv_data = filtered_df.to_csv(index=False, encoding='utf-8-sig')
     st.download_button(
         label="📥 검색 결과 CSV 다운로드 (엑셀 호환)",
@@ -186,9 +182,6 @@ if df is not None and not df.empty:
         mime="text/csv"
     )
 
-    # -------------------------------------------------------------------------
-    # 종목별 심층 분석 및 인터랙티브 차트
-    # -------------------------------------------------------------------------
     st.markdown("---")
     st.markdown("### 🔍 종목별 심층 차트 & 반등 근거 분석")
     
@@ -217,7 +210,6 @@ if df is not None and not df.empty:
             st.markdown(f"- **최근 3일 기관 순매수**: `{selected_row['organ_buy_3d']:+,} 주` (연속 {selected_row['organ_consec']}일)")
             
         with c2:
-            # 캔들스틱 + 볼린저밴드 + 거래량 + RSI 차트 그리기
             df_chart = fetch_stock_ohlcv(selected_code, days=120)
             if df_chart is not None and len(df_chart) > 0:
                 df_chart['MA5'] = df_chart['Close'].rolling(5).mean()
@@ -228,7 +220,6 @@ if df is not None and not df.empty:
                 df_chart['BB_Upper'] = upper
                 df_chart['BB_Lower'] = lower
                 
-                # 서브플롯 생성 (위: 가격/볼린저/이평, 중간: 거래량, 아래: RSI)
                 fig = make_subplots(
                     rows=3, cols=1, 
                     shared_xaxes=True, 
@@ -237,7 +228,6 @@ if df is not None and not df.empty:
                     row_heights=[0.6, 0.2, 0.2]
                 )
                 
-                # 1. 캔들스틱
                 fig.add_trace(go.Candlestick(
                     x=df_chart.index,
                     open=df_chart['Open'],
@@ -245,20 +235,17 @@ if df is not None and not df.empty:
                     low=df_chart['Low'],
                     close=df_chart['Close'],
                     name="주가",
-                    increasing_line_color='#EF4444', # 한국식 빨강 상승
-                    decreasing_line_color='#3B82F6' # 한국식 파랑 하락
+                    increasing_line_color='#EF4444',
+                    decreasing_line_color='#3B82F6'
                 ), row=1, col=1)
                 
-                # 이평선
                 fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['MA5'], name="5일선", line=dict(color='orange', width=1)), row=1, col=1)
                 fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['MA20'], name="20일선", line=dict(color='green', width=1.5)), row=1, col=1)
                 fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['MA60'], name="60일선", line=dict(color='purple', width=1)), row=1, col=1)
                 
-                # 볼린저 밴드
                 fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['BB_Upper'], name="BB 상단", line=dict(color='rgba(150,150,150,0.5)', dash='dot')), row=1, col=1)
                 fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['BB_Lower'], name="BB 하단", line=dict(color='rgba(239,68,68,0.7)', dash='dash')), row=1, col=1)
                 
-                # 2. 거래량
                 colors = ['#EF4444' if c >= o else '#3B82F6' for c, o in zip(df_chart['Close'], df_chart['Open'])]
                 fig.add_trace(go.Bar(
                     x=df_chart.index,
@@ -267,9 +254,7 @@ if df is not None and not df.empty:
                     marker_color=colors
                 ), row=2, col=1)
                 
-                # 3. RSI
                 fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['RSI'], name="RSI(14)", line=dict(color='#8B5CF6')), row=3, col=1)
-                # 과매도 기준선 (30, 70)
                 fig.add_hline(y=30, line_dash="dash", line_color="red", row=3, col=1)
                 fig.add_hline(y=70, line_dash="dash", line_color="green", row=3, col=1)
                 
@@ -285,16 +270,3 @@ if df is not None and not df.empty:
 else:
     if not start_scan:
         st.info("👈 왼쪽 상단의 **[🚀 바닥 반등 종목 스캔 시작]** 버튼을 눌러 스캔을 진행해 주세요.")
-        
-        # 안내 가이드 카드
-        st.markdown("""
-        ### 📖 바닥 반등 종목 발굴 알고리즘 원리
-        
-        주가가 바닥에 있다고 해서 무조건 매수하면 계속해서 하락하는 **'떨어지는 칼날(Value Trap)'**에 걸릴 수 있습니다.
-        본 프로그램은 아래 3대 핵심 요건을 검증하여 **진짜 반등 확률이 높은 종목**을 골라냅니다:
-        
-        1. **바닥성 검증 (Bottom Check)**: 52주 최저가 대비 +0~15% 이내, 52주 최고가 대비 충분한 가격 조정, 볼린저밴드 하단선 지지
-        2. **스마트 머니 수급 (Smart Money Flow)**: 바닥권에서 **외국인 및 기관의 동시 순매수(쌍끌이)** 유입 여부
-        3. **거래량 폭증 & 기술적 전환 (Momentum Shift)**: 20일 평균 대비 거래량 1.5배~3배 이상 급증(매집봉), 5일선/20일선 골든크로스, RSI 과매도 탈출
-        4. **가치평가 안전마진 (Safety Margin)**: PBR 1.0 이하 저평가 및 안정적 실적 기반
-        """)

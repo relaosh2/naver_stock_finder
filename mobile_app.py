@@ -16,7 +16,7 @@ from scanner import run_stock_scan
 APP_PASSWORD = "6101fks!"
 
 st.set_page_config(
-    page_title="📈 네이버 증권 바닥 반등 주식찾기 Mobile",
+    page_title="📈 갓성호님의 바닥에서 난 잡아",
     page_icon="📱",
     layout="centered",
     initial_sidebar_state="collapsed"
@@ -142,8 +142,8 @@ st.markdown("""
 if not st.session_state.authenticated:
     st.markdown("""
     <div class="mobile-header" style="text-align: center;">
-        <div class="mobile-title">🔒 보안 잠금</div>
-        <div class="mobile-sub">나만의 주식찾기 모바일 앱</div>
+        <div class="mobile-title">🔒 갓성호님의 바닥에서 난 잡아</div>
+        <div class="mobile-sub">보안 잠금 모바일 주식 시스템</div>
     </div>
     """, unsafe_allow_html=True)
     
@@ -157,14 +157,14 @@ if not st.session_state.authenticated:
         else:
             st.error("❌ 비밀번호가 올바르지 않습니다.")
             
-    st.stop() # 인증되지 않았으면 아래 메인 앱 화면을 렌더링하지 않음
+    st.stop()
 
 # -----------------------------------------------------------------------------
 # 모바일 메인 헤더
 # -----------------------------------------------------------------------------
 st.markdown("""
 <div class="mobile-header">
-    <div class="mobile-title">📱 네이버 증권 바닥 반등 발굴기</div>
+    <div class="mobile-title">📱 갓성호님의 바닥에서 난 잡아</div>
     <div class="mobile-sub">52주 최저가/과매도 + 외인·기관 수급 유입 + 거래량 급증 탐색</div>
 </div>
 """, unsafe_allow_html=True)
