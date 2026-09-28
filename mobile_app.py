@@ -9,6 +9,7 @@ import json
 from data_fetcher import get_stock_list, fetch_naver_stock_info, fetch_stock_ohlcv
 from technical_indicators import analyze_technical_indicators, calculate_rsi, calculate_bollinger_bands
 from scanner import run_stock_scan
+from kakao_notifier import send_kakao_stock_alert, KAKAO_REST_API_KEY
 
 # -----------------------------------------------------------------------------
 # 비밀번호 설정 및 보안 로직
@@ -199,7 +200,7 @@ with p_col4:
 # -----------------------------------------------------------------------------
 # 검색 옵션 & 필터 (접이식 Expander)
 # -----------------------------------------------------------------------------
-with st.expander("⚙️ **스캔 필터 설정**", expanded=False):
+with st.expander("⚙️ **스캔 필터 & 카카오 알림 설정**", expanded=False):
     market_choice = st.selectbox("대상 시장", ["전체 (KOSPI + KOSDAQ)", "코스피 (KOSPI)", "코스닥 (KOSDAQ)"])
     market_map = {"전체 (KOSPI + KOSDAQ)": "ALL", "코스피 (KOSPI)": "KOSPI", "코스닥 (KOSDAQ)": "KOSDAQ"}
     selected_market = market_map[market_choice]
@@ -212,6 +213,29 @@ with st.expander("⚙️ **스캔 필터 설정**", expanded=False):
     req_double_buy = st.checkbox("외인+기관 쌍끌이 순매수", value=(st.session_state.active_preset == "DOUBLE"))
     req_vol_surge = st.checkbox("거래량 급증 (20일 평균 1.3배+)", value=(st.session_state.active_preset == "VOL"))
     req_low_pbr = st.checkbox("저평가 PBR 1.0 이하만", value=(st.session_state.active_preset == "PBR"))
+
+    st.markdown("---")
+    st.markdown("##### 💬 카카오톡 알림 연동")
+    kakao_token_user = st.text_input("카카오톡 Access Token (선택)", value="", type="password", help="REST API 키: " + KAKAO_REST_API_KEY[:6] + "***")
+    
+    if st.button("💬 테스트 종목 카카오톡 메시지 전송", use_container_width=True):
+        sample_stock = {
+            "code": "005930",
+            "name": "삼성전자",
+            "total_score": 75,
+            "current_price": 65000,
+            "diff_from_52w_low_pct": 3.2,
+            "foreign_buy_3d": 1250000,
+            "organ_buy_3d": 850000,
+            "grade": "⭐ 강력 반등 유망",
+            "reasons": ["🔥 외인 & 기관 동시 순매수 (쌍끌이 유입)", "바닥권 거래량 폭증 (평균 대비 2.1배 - 매집 의심)", "RSI(28.5) 과매도권 탈출 반등 신호"]
+        }
+        tk = kakao_token_user if kakao_token_user else KAKAO_REST_API_KEY
+        ok = send_kakao_stock_alert(tk, sample_stock)
+        if ok:
+            st.success("✅ 카카오톡 알림 메시지가 성공적으로 발송되었습니다!")
+        else:
+            st.info("💡 카카오 동의항목(talk_message) 설정 후 수신 가능합니다.")
 
 # -----------------------------------------------------------------------------
 # 스캔 실행 버튼
@@ -315,9 +339,18 @@ if df is not None and not df.empty:
                 st.markdown(f"- **PBR**: `{pbr_str}` | **PER**: `{per_str}`")
                 st.markdown(f"- **거래량 급증률**: `{row['vol_surge_ratio']:.2f}배` | **RSI(14)**: `{row['rsi']:.1f}`")
 
-                # 네이버 증권 모바일 연결 버튼
-                naver_mobile_url = f"https://m.stock.naver.com/item/main.naver?code={row['code']}"
-                st.markdown(f'<a href="{naver_mobile_url}" target="_blank" class="naver-btn">📲 네이버 증권 모바일 페이지 이동 ↗</a>', unsafe_allow_html=True)
+                # 카카오톡 알림 보내기 버튼 & 네이버 증권 모바일 연결 버튼
+                btn_col1, btn_col2 = st.columns(2)
+                with btn_col1:
+                    if st.button(f"💬 카톡전송", key=f"k_btn_{row['code']}", use_container_width=True):
+                        ok = send_kakao_stock_alert(KAKAO_REST_API_KEY, row.to_dict())
+                        if ok:
+                            st.toast(f"✅ {row['name']} 카카오톡 알림 발송 완료!", icon="💬")
+                        else:
+                            st.toast("⚠️ 카카오톡 메시지 전송 확인 필요", icon="⚠️")
+                with btn_col2:
+                    naver_mobile_url = f"https://m.stock.naver.com/item/main.naver?code={row['code']}"
+                    st.markdown(f'<a href="{naver_mobile_url}" target="_blank" class="naver-btn" style="margin-top:0; padding:6px 10px; font-size:0.85rem;">네이버증권 ↗</a>', unsafe_allow_html=True)
 
                 # Plotly 차트
                 df_chart = fetch_stock_ohlcv(row['code'], days=90)

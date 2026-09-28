@@ -4,16 +4,20 @@ import time
 from datetime import datetime
 from scanner import run_stock_scan
 
+# 사용자 등록 카카오 REST API 키
+KAKAO_REST_API_KEY = "5bdff8c65268e9e854682507176f7b85"
+
 # 오늘 이미 알림을 보낸 종목 코드 저장 (중복 알림 방지)
 alerted_today = set()
 
-def send_kakao_stock_alert(access_token: str, stock: dict) -> bool:
+def send_kakao_stock_alert(access_token_or_key: str, stock: dict) -> bool:
     """
     카카오톡 '나에게 보내기' API를 사용하여 바닥 반등 포착 종목 알림 메시지 전송
     """
+    token = access_token_or_key if access_token_or_key else KAKAO_REST_API_KEY
     url = "https://kapi.kakao.com/v2/api/talk/memo/default/send"
     headers = {
-        "Authorization": f"Bearer {access_token}",
+        "Authorization": f"Bearer {token}",
         "Content-Type": "application/x-www-form-urlencoded"
     }
 
@@ -33,7 +37,7 @@ def send_kakao_stock_alert(access_token: str, stock: dict) -> bool:
         "content": {
             "title": f"📈 [갓성호님의 바닥에서 난 잡아] 반등 신호 포착!",
             "description": f"📌 {name} ({code})\n• 반등점수: {score}점 [{grade}]\n• 현재가: {price:,}원 (52주최저 대비 +{diff_low:.1f}%)\n• 외인 3일: {f_buy:+,}주 | 기관: {o_buy:+,}주\n\n💡 포착사유:\n• {reasons}",
-            "image_url": "https://img.icons8.com/color/192,line-chart.png",
+            "image_url": "https://img.icons8.com/color/192/line-chart.png",
             "link": {
                 "web_url": "https://realosh-stock.streamlit.app",
                 "mobile_web_url": "https://realosh-stock.streamlit.app"
@@ -60,14 +64,14 @@ def send_kakao_stock_alert(access_token: str, stock: dict) -> bool:
             print(f"✅ [{name}] 카카오톡 알림 전송 성공!")
             return True
         else:
-            print(f"❌ 카카오톡 전송 실패 ({res.status_code}): {res.text}")
+            print(f"❌ 카카오톡 전송 결과 ({res.status_code}): {res.text}")
             return False
     except Exception as e:
         print(f"❌ 카카오톡 API 에러: {e}")
         return False
 
 
-def run_realtime_kakao_scanner(access_token: str, min_score: int = 70, market: str = "ALL", top_n: int = 150):
+def run_realtime_kakao_scanner(access_token_or_key: str = KAKAO_REST_API_KEY, min_score: int = 70, market: str = "ALL", top_n: int = 150):
     """
     실시간 종목 스캔 수행 후 조건 충족 시 카카오톡 알림 발송
     """
@@ -78,24 +82,21 @@ def run_realtime_kakao_scanner(access_token: str, min_score: int = 70, market: s
         print("발굴된 종목이 없습니다.")
         return []
 
-    # 점수 조건 및 오늘 미발송 종목 필터링
     target_stocks = df_res[df_res['total_score'] >= min_score].to_dict('records')
     sent_count = 0
 
     for stock in target_stocks:
         code = stock['code']
         if code not in alerted_today:
-            success = send_kakao_stock_alert(access_token, stock)
+            success = send_kakao_stock_alert(access_token_or_key, stock)
             if success:
                 alerted_today.add(code)
                 sent_count += 1
-                time.sleep(1) # 카카오 API 도배 방지 1초 대기
+                time.sleep(1)
 
     print(f"[{datetime.now().strftime('%H:%M:%S')}] ✨ 스캔 완료 (신규 알림 전송: {sent_count}건)\n")
     return target_stocks
 
 
 if __name__ == "__main__":
-    # 카카오 Access Token 테스트 샘플
-    TEST_TOKEN = "YOUR_KAKAO_ACCESS_TOKEN"
-    print("카카오톡 알림 모듈이 성공적으로 로드되었습니다.")
+    print(f"카카오톡 알림 모듈 설정 완료! (REST API KEY: {KAKAO_REST_API_KEY[:6]}***)")
