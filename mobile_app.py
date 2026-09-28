@@ -11,18 +11,22 @@ from technical_indicators import analyze_technical_indicators, calculate_rsi, ca
 from scanner import run_stock_scan
 
 # -----------------------------------------------------------------------------
-# 모바일 앱 전용 페이지 설정
+# 비밀번호 설정 및 보안 로직
 # -----------------------------------------------------------------------------
+APP_PASSWORD = "6101fks!"
+
 st.set_page_config(
     page_title="📈 네이버 증권 바닥 반등 주식찾기 Mobile",
     page_icon="📱",
-    layout="centered", # 모바일 가독성을 위해 centered 기본 설정
-    initial_sidebar_state="collapsed" # 모바일에선 사이드바를 기본 접음
+    layout="centered",
+    initial_sidebar_state="collapsed"
 )
 
-# -----------------------------------------------------------------------------
+# 세션 인증 확인
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
 # 모바일 PWA 메타 태그 & 커스텀 CSS 스타일링
-# -----------------------------------------------------------------------------
 st.markdown("""
 <head>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -33,7 +37,6 @@ st.markdown("""
     <link rel="apple-touch-icon" href="https://img.icons8.com/color/96/line-chart.png">
 </head>
 <style>
-    /* 모바일 가독성 최적화 CSS */
     .stApp {
         background-color: #F8FAFC;
     }
@@ -134,7 +137,30 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # -----------------------------------------------------------------------------
-# 모바일 상단 헤더
+# 비밀번호 미인증 시 화면
+# -----------------------------------------------------------------------------
+if not st.session_state.authenticated:
+    st.markdown("""
+    <div class="mobile-header" style="text-align: center;">
+        <div class="mobile-title">🔒 보안 잠금</div>
+        <div class="mobile-sub">나만의 주식찾기 모바일 앱</div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    st.markdown("##### 🔑 비밀번호를 입력해주세요")
+    pwd_input = st.text_input("비밀번호", type="password", key="pwd_field")
+    
+    if st.button("🔓 앱 열기", type="primary", use_container_width=True):
+        if pwd_input == APP_PASSWORD:
+            st.session_state.authenticated = True
+            st.rerun()
+        else:
+            st.error("❌ 비밀번호가 올바르지 않습니다.")
+            
+    st.stop() # 인증되지 않았으면 아래 메인 앱 화면을 렌더링하지 않음
+
+# -----------------------------------------------------------------------------
+# 모바일 메인 헤더
 # -----------------------------------------------------------------------------
 st.markdown("""
 <div class="mobile-header">
