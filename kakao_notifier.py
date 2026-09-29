@@ -10,9 +10,10 @@ KAKAO_REST_API_KEY = "5bdff8c65268e9e854682507176f7b85"
 # 오늘 이미 알림을 보낸 종목 코드 저장 (중복 알림 방지)
 alerted_today = set()
 
-def send_kakao_stock_alert(access_token_or_key: str, stock: dict) -> bool:
+def send_kakao_stock_alert(access_token_or_key: str, stock: dict) -> tuple:
     """
     카카오톡 '나에게 보내기' API를 사용하여 바닥 반등 포착 종목 알림 메시지 전송
+    반환값: (성공여부: bool, 메세지: str)
     """
     token = access_token_or_key if access_token_or_key else KAKAO_REST_API_KEY
     url = "https://kapi.kakao.com/v2/api/talk/memo/default/send"
@@ -59,16 +60,23 @@ def send_kakao_stock_alert(access_token_or_key: str, stock: dict) -> bool:
     }
 
     try:
-        res = requests.post(url, headers=headers, data=payload)
+        res = requests.post(url, headers=headers, data=payload, timeout=5)
         if res.status_code == 200:
-            print(f"✅ [{name}] 카카오톡 알림 전송 성공!")
-            return True
+            msg = f"✅ [{name}] 카카오톡 알림 전송 성공!"
+            print(msg)
+            return True, msg
+        elif res.status_code == 401:
+            msg = f"🔑 카카오톡 Access Token(로그인 토큰)이 필요합니다.\nREST API 키({token[:6]}***)는 카카오 로그인 토큰이 아니므로 401 오류가 발생합니다."
+            print(msg)
+            return False, msg
         else:
-            print(f"❌ 카카오톡 전송 결과 ({res.status_code}): {res.text}")
-            return False
+            msg = f"❌ 카카오톡 전송 실패 ({res.status_code}): {res.text}"
+            print(msg)
+            return False, msg
     except Exception as e:
-        print(f"❌ 카카오톡 API 에러: {e}")
-        return False
+        msg = f"❌ 카카오톡 API 에러: {e}"
+        print(msg)
+        return False, msg
 
 
 def run_realtime_kakao_scanner(access_token_or_key: str = KAKAO_REST_API_KEY, min_score: int = 70, market: str = "ALL", top_n: int = 150):
@@ -88,11 +96,11 @@ def run_realtime_kakao_scanner(access_token_or_key: str = KAKAO_REST_API_KEY, mi
     for stock in target_stocks:
         code = stock['code']
         if code not in alerted_today:
-            success = send_kakao_stock_alert(access_token_or_key, stock)
+            success, _ = send_kakao_stock_alert(access_token_or_key, stock)
             if success:
                 alerted_today.add(code)
                 sent_count += 1
-                time.sleep(1)
+                time.sleep(1.5)
 
     print(f"[{datetime.now().strftime('%H:%M:%S')}] ✨ 스캔 완료 (신규 알림 전송: {sent_count}건)\n")
     return target_stocks

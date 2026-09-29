@@ -231,11 +231,11 @@ with st.expander("⚙️ **스캔 필터 & 카카오 알림 설정**", expanded=
             "reasons": ["🔥 외인 & 기관 동시 순매수 (쌍끌이 유입)", "바닥권 거래량 폭증 (평균 대비 2.1배 - 매집 의심)", "RSI(28.5) 과매도권 탈출 반등 신호"]
         }
         tk = kakao_token_user if kakao_token_user else KAKAO_REST_API_KEY
-        ok = send_kakao_stock_alert(tk, sample_stock)
+        ok, msg = send_kakao_stock_alert(tk, sample_stock)
         if ok:
-            st.success("✅ 카카오톡 알림 메시지가 성공적으로 발송되었습니다!")
+            st.success(msg)
         else:
-            st.info("💡 카카오 동의항목(talk_message) 설정 후 수신 가능합니다.")
+            st.error(msg)
 
 # -----------------------------------------------------------------------------
 # 스캔 실행 버튼
@@ -343,11 +343,11 @@ if df is not None and not df.empty:
                 btn_col1, btn_col2 = st.columns(2)
                 with btn_col1:
                     if st.button(f"💬 카톡전송", key=f"k_btn_{row['code']}", use_container_width=True):
-                        ok = send_kakao_stock_alert(KAKAO_REST_API_KEY, row.to_dict())
+                        ok, msg = send_kakao_stock_alert(KAKAO_REST_API_KEY, row.to_dict())
                         if ok:
                             st.toast(f"✅ {row['name']} 카카오톡 알림 발송 완료!", icon="💬")
                         else:
-                            st.toast("⚠️ 카카오톡 메시지 전송 확인 필요", icon="⚠️")
+                            st.error(msg)
                 with btn_col2:
                     naver_mobile_url = f"https://m.stock.naver.com/item/main.naver?code={row['code']}"
                     st.markdown(f'<a href="{naver_mobile_url}" target="_blank" class="naver-btn" style="margin-top:0; padding:6px 10px; font-size:0.85rem;">네이버증권 ↗</a>', unsafe_allow_html=True)
