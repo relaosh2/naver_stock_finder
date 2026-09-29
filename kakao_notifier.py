@@ -4,9 +4,9 @@ import time
 from datetime import datetime
 from scanner import run_stock_scan
 
-# 사용자 등록 카카오 REST API 키
+# 사용자 등록 카카오 REST API 키 및 주소
 KAKAO_REST_API_KEY = "5bdff8c65268e9e854682507176f7b85"
-REDIRECT_URI = "https://realosh-stock.streamlit.app"
+REDIRECT_URI = "https://realoshstock2.streamlit.app"
 
 # 오늘 이미 알림을 보낸 종목 코드 저장 (중복 알림 방지)
 alerted_today = set()
@@ -108,7 +108,7 @@ def send_kakao_stock_alert(access_token: str, stock: dict) -> tuple:
             print(msg)
             return True, msg
         elif res.status_code == 401:
-            msg = "🔑 카카오톡 연동이 필요합니다. [💬 카카오톡 1초 로그인 연동하기] 버튼을 터치해주세요."
+            msg = "🔑 카카오톡 연동이 필요합니다. 상단의 [💬 카카오톡 1초 로그인 연동하기] 버튼을 터치해주세요."
             print(msg)
             return False, msg
         else:
