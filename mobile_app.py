@@ -9,7 +9,7 @@ import json
 from data_fetcher import get_stock_list, fetch_naver_stock_info, fetch_stock_ohlcv
 from technical_indicators import analyze_technical_indicators, calculate_rsi, calculate_bollinger_bands
 from scanner import run_stock_scan
-from kakao_notifier import send_kakao_stock_alert, KAKAO_REST_API_KEY, REDIRECT_URI, exchange_code_for_tokens
+from kakao_notifier import send_kakao_stock_alert, KAKAO_REST_API_KEY, get_redirect_uri, exchange_code_for_tokens
 
 # -----------------------------------------------------------------------------
 # 비밀번호 설정 및 보안 로직
@@ -23,6 +23,9 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# 동적 Redirect URI 감지
+current_redirect_uri = get_redirect_uri()
+
 # 세션 인증 확인
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
@@ -33,7 +36,7 @@ if "kakao_token" not in st.session_state:
 query_params = st.query_params
 if "code" in query_params:
     auth_code = query_params["code"]
-    tokens = exchange_code_for_tokens(auth_code)
+    tokens = exchange_code_for_tokens(auth_code, redirect_uri=current_redirect_uri)
     if tokens.get("access_token"):
         st.session_state.kakao_token = tokens.get("access_token")
         st.toast("🎉 카카오톡 계정이 성공적으로 연동되었습니다!", icon="💬")
@@ -194,7 +197,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # 카카오톡 로그인 연동 버튼
-kakao_login_url = f"https://kauth.kakao.com/oauth/authorize?client_id={KAKAO_REST_API_KEY}&redirect_uri={REDIRECT_URI}&response_type=code&scope=talk_message"
+kakao_login_url = f"https://kauth.kakao.com/oauth/authorize?client_id={KAKAO_REST_API_KEY}&redirect_uri={current_redirect_uri}&response_type=code&scope=talk_message"
 if not st.session_state.kakao_token:
     st.markdown(f'<a href="{kakao_login_url}" target="_blank" class="kakao-login-btn">💬 카카오톡 1초 로그인 연동하기 (터치 1번) ↗</a>', unsafe_allow_html=True)
 else:

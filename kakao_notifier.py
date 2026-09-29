@@ -11,23 +11,49 @@ DEFAULT_REDIRECT_URI = "https://realoshstock2.streamlit.app"
 try:
     import streamlit as st
     KAKAO_REST_API_KEY = st.secrets.get("KAKAO_REST_API_KEY", DEFAULT_KAKAO_KEY)
-    REDIRECT_URI = st.secrets.get("REDIRECT_URI", DEFAULT_REDIRECT_URI)
 except Exception:
     KAKAO_REST_API_KEY = DEFAULT_KAKAO_KEY
-    REDIRECT_URI = DEFAULT_REDIRECT_URI
+
+REDIRECT_URI = DEFAULT_REDIRECT_URI
+
+def get_redirect_uri() -> str:
+    """
+    현재 접속한 Streamlit 앱의 도메인(URI)을 동적으로 감지하거나 기본값 반환
+    """
+    try:
+        import streamlit as st
+        if hasattr(st, "context") and hasattr(st.context, "headers"):
+            headers = st.context.headers
+            host = headers.get("host") or headers.get("Host") or headers.get("x-forwarded-host")
+            if host:
+                proto = headers.get("x-forwarded-proto", "https")
+                return f"{proto}://{host}"
+    except Exception:
+        pass
+
+    try:
+        import streamlit as st
+        if "REDIRECT_URI" in st.secrets:
+            return st.secrets["REDIRECT_URI"]
+    except Exception:
+        pass
+
+    return DEFAULT_REDIRECT_URI
 
 # 오늘 이미 알림을 보낸 종목 코드 저장 (중복 알림 방지)
 alerted_today = set()
 
-def exchange_code_for_tokens(auth_code: str) -> dict:
+def exchange_code_for_tokens(auth_code: str, redirect_uri: str = None) -> dict:
     """
     카카오 인가 코드(code)를 Access Token & Refresh Token으로 교환
     """
+    if not redirect_uri:
+        redirect_uri = get_redirect_uri()
     url = "https://kauth.kakao.com/oauth/token"
     data = {
         "grant_type": "authorization_code",
         "client_id": KAKAO_REST_API_KEY,
-        "redirect_uri": REDIRECT_URI,
+        "redirect_uri": redirect_uri,
         "code": auth_code
     }
     try:
