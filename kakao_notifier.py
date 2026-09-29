@@ -27,18 +27,18 @@ def get_redirect_uri() -> str:
             host = headers.get("host") or headers.get("Host") or headers.get("x-forwarded-host")
             if host:
                 proto = headers.get("x-forwarded-proto", "https")
-                return f"{proto}://{host}"
+                return f"{proto}://{host}".rstrip("/")
     except Exception:
         pass
 
     try:
         import streamlit as st
         if "REDIRECT_URI" in st.secrets:
-            return st.secrets["REDIRECT_URI"]
+            return st.secrets["REDIRECT_URI"].rstrip("/")
     except Exception:
         pass
 
-    return DEFAULT_REDIRECT_URI
+    return DEFAULT_REDIRECT_URI.rstrip("/")
 
 # 오늘 이미 알림을 보낸 종목 코드 저장 (중복 알림 방지)
 alerted_today = set()
