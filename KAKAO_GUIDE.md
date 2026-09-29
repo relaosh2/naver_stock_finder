@@ -31,7 +31,7 @@
 • 바닥권 거래량 폭증 (평균 대비 2.1배 - 매집 의심)
 • RSI(28.5) 과매도권 탈출 반등 신호
 
-[📱 모바일 앱에서 차트 보기] ➡️ https://realosh-stock.streamlit.app
+[📱 모바일 앱에서 차트 보기] ➡️ https://realoshstock2.streamlit.app
 ```
 
 ---

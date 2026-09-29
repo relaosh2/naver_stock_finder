@@ -27,7 +27,7 @@ def send_telegram_stock_alert(bot_token: str, chat_id: str, stock: dict) -> bool
 💡 <b>포착사유:</b>
 • {reasons}
 
-📱 <a href="https://realosh-stock.streamlit.app">모바일 앱에서 차트 보기 ↗</a>
+📱 <a href="https://realoshstock2.streamlit.app">모바일 앱에서 차트 보기 ↗</a>
 """
 
     payload = {
