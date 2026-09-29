@@ -45,10 +45,15 @@ def get_stock_list(market: str = "ALL") -> pd.DataFrame:
         # 보통주는 끝자리가 0 (우선주는 5, 7, 9 등)
         df = df[df['code'].astype(str).str.endswith('0')]
         
-        # 이름 필터링 (스팩, ETN, ETF, 리츠 등 제외)
-        exclude_keywords = ['스팩', 'SPAC', 'ETF', 'ETN', '리츠', '호', '우B', '우C']
+        # 이름 필터링 (스팩, ETN, ETF, 리츠, 투자주의/관리/경고 등 제외)
+        exclude_keywords = ['스팩', 'SPAC', 'ETF', 'ETN', '리츠', '호', '우B', '우C', '관리', '주의', '경고', '위험', '환기', '정지']
         pattern = '|'.join(exclude_keywords)
         df = df[~df['name'].str.contains(pattern, na=False, case=False)]
+        
+        # Dept(소속부) 필터링 (관리종목, 투자주의, 투자경고, 투자위험, 환기종목 제외)
+        if 'dept' in df.columns:
+            dept_pattern = '관리|주의|경고|위험|환기|정지'
+            df = df[~df['dept'].astype(str).str.contains(dept_pattern, na=False, case=False)]
         
         # 시가총액 기준 내림차순 정렬 (유동성 있는 종목 우선)
         if 'marcap' in df.columns:
@@ -73,7 +78,8 @@ def fetch_naver_stock_info(code: str) -> dict:
         "pbr": None,
         "per": None,
         "market_cap_str": "",
-        "dividend_yield": None
+        "dividend_yield": None,
+        "is_restricted": False
     }
     
     # 1. 외인/기관 수급 트렌드 (최근 5일)
@@ -126,6 +132,13 @@ def fetch_naver_stock_info(code: str) -> dict:
         res2 = requests.get(url_integ, headers=HEADERS, timeout=3)
         if res2.status_code == 200:
             data2 = res2.json()
+            
+            # 관리종목 / 거래정지 / 투자주의 / 투자경고 / 투자위험 종목 상태 감지
+            stock_state = data2.get("stockState", {}) or {}
+            trade_stop = data2.get("tradeStopState", False)
+            if trade_stop or stock_state.get("isManagement") or stock_state.get("isCaution") or stock_state.get("isWarning") or stock_state.get("isRisk"):
+                info["is_restricted"] = True
+
             total_infos = data2.get("totalInfos", [])
             for item in total_infos:
                 key = item.get("key", "")

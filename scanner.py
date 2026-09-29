@@ -27,6 +27,8 @@ def scan_single_stock(row):
         
     # 3. 네이버 수급 및 펀더멘털 조회
     naver_info = fetch_naver_stock_info(code)
+    if naver_info.get("is_restricted"):
+        return None  # 투자주의 / 투자경고 / 투자위험 / 관리종목 / 거래정지 2차 제외
     
     # 4. 반등 점수 계산
     score_result = calculate_rebound_score(tech_data, naver_info)
