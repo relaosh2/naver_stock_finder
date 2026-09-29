@@ -5,8 +5,16 @@ from datetime import datetime
 from scanner import run_stock_scan
 
 # 사용자 등록 카카오 REST API 키 및 주소
-KAKAO_REST_API_KEY = "5bdff8c65268e9e854682507176f7b85"
-REDIRECT_URI = "https://realoshstock2.streamlit.app"
+DEFAULT_KAKAO_KEY = "5bdff8c65268e9e854682507176f7b85"
+DEFAULT_REDIRECT_URI = "https://realoshstock2.streamlit.app"
+
+try:
+    import streamlit as st
+    KAKAO_REST_API_KEY = st.secrets.get("KAKAO_REST_API_KEY", DEFAULT_KAKAO_KEY)
+    REDIRECT_URI = st.secrets.get("REDIRECT_URI", DEFAULT_REDIRECT_URI)
+except Exception:
+    KAKAO_REST_API_KEY = DEFAULT_KAKAO_KEY
+    REDIRECT_URI = DEFAULT_REDIRECT_URI
 
 # 오늘 이미 알림을 보낸 종목 코드 저장 (중복 알림 방지)
 alerted_today = set()
