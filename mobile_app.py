@@ -196,7 +196,7 @@ st.markdown("""
 # 카카오톡 로그인 연동 버튼
 kakao_login_url = f"https://kauth.kakao.com/oauth/authorize?client_id={KAKAO_REST_API_KEY}&redirect_uri={REDIRECT_URI}&response_type=code&scope=talk_message"
 if not st.session_state.kakao_token:
-    st.markdown(f'<a href="{kakao_login_url}" target="_self" class="kakao-login-btn">💬 카카오톡 1초 로그인 연동하기 (터치 1번) ↗</a>', unsafe_allow_html=True)
+    st.markdown(f'<a href="{kakao_login_url}" target="_blank" class="kakao-login-btn">💬 카카오톡 1초 로그인 연동하기 (터치 1번) ↗</a>', unsafe_allow_html=True)
 else:
     st.success("✅ 카카오톡 연동 완료! 종목 알림이 내 카카오톡으로 발송됩니다.")
 
