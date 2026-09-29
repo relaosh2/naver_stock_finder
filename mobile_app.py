@@ -9,7 +9,7 @@ import json
 from data_fetcher import get_stock_list, fetch_naver_stock_info, fetch_stock_ohlcv
 from technical_indicators import analyze_technical_indicators, calculate_rsi, calculate_bollinger_bands
 from scanner import run_stock_scan
-from kakao_notifier import send_kakao_stock_alert, KAKAO_REST_API_KEY
+from kakao_notifier import send_kakao_stock_alert, KAKAO_REST_API_KEY, REDIRECT_URI, exchange_code_for_tokens
 
 # -----------------------------------------------------------------------------
 # 비밀번호 설정 및 보안 로직
@@ -26,6 +26,17 @@ st.set_page_config(
 # 세션 인증 확인
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
+if "kakao_token" not in st.session_state:
+    st.session_state.kakao_token = ""
+
+# 카카오 OAuth Redirect Code 자동 인식 및 토큰 교환
+query_params = st.query_params
+if "code" in query_params:
+    auth_code = query_params["code"]
+    tokens = exchange_code_for_tokens(auth_code)
+    if tokens.get("access_token"):
+        st.session_state.kakao_token = tokens.get("access_token")
+        st.toast("🎉 카카오톡 계정이 성공적으로 연동되었습니다!", icon="💬")
 
 # 모바일 PWA 메타 태그 & 커스텀 CSS 스타일링
 st.markdown("""
@@ -134,6 +145,18 @@ st.markdown("""
         text-decoration: none;
         margin-top: 10px;
     }
+    .kakao-login-btn {
+        display: block;
+        width: 100%;
+        text-align: center;
+        background-color: #FEE500;
+        color: #000000 !important;
+        font-weight: bold;
+        padding: 10px;
+        border-radius: 8px;
+        text-decoration: none;
+        margin-bottom: 12px;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -169,6 +192,13 @@ st.markdown("""
     <div class="mobile-sub">52주 최저가/과매도 + 외인·기관 수급 유입 + 거래량 급증 탐색</div>
 </div>
 """, unsafe_allow_html=True)
+
+# 카카오톡 로그인 연동 버튼
+kakao_login_url = f"https://kauth.kakao.com/oauth/authorize?client_id={KAKAO_REST_API_KEY}&redirect_uri={REDIRECT_URI}&response_type=code&scope=talk_message"
+if not st.session_state.kakao_token:
+    st.markdown(f'<a href="{kakao_login_url}" target="_self" class="kakao-login-btn">💬 카카오톡 1초 로그인 연동하기 (터치 1번) ↗</a>', unsafe_allow_html=True)
+else:
+    st.success("✅ 카카오톡 연동 완료! 종목 알림이 내 카카오톡으로 발송됩니다.")
 
 # -----------------------------------------------------------------------------
 # 세션 상태 관리
@@ -215,9 +245,7 @@ with st.expander("⚙️ **스캔 필터 & 카카오 알림 설정**", expanded=
     req_low_pbr = st.checkbox("저평가 PBR 1.0 이하만", value=(st.session_state.active_preset == "PBR"))
 
     st.markdown("---")
-    st.markdown("##### 💬 카카오톡 알림 연동")
-    kakao_token_user = st.text_input("카카오톡 Access Token (선택)", value="", type="password", help="REST API 키: " + KAKAO_REST_API_KEY[:6] + "***")
-    
+    st.markdown("##### 💬 카카오톡 알림 테스트")
     if st.button("💬 테스트 종목 카카오톡 메시지 전송", use_container_width=True):
         sample_stock = {
             "code": "005930",
@@ -230,7 +258,7 @@ with st.expander("⚙️ **스캔 필터 & 카카오 알림 설정**", expanded=
             "grade": "⭐ 강력 반등 유망",
             "reasons": ["🔥 외인 & 기관 동시 순매수 (쌍끌이 유입)", "바닥권 거래량 폭증 (평균 대비 2.1배 - 매집 의심)", "RSI(28.5) 과매도권 탈출 반등 신호"]
         }
-        tk = kakao_token_user if kakao_token_user else KAKAO_REST_API_KEY
+        tk = st.session_state.kakao_token if st.session_state.kakao_token else KAKAO_REST_API_KEY
         ok, msg = send_kakao_stock_alert(tk, sample_stock)
         if ok:
             st.success(msg)
@@ -281,7 +309,6 @@ if df is not None and not df.empty:
 
     st.markdown(f"### 🎯 조건 만족 종목 ({len(filtered_df)}건)")
 
-    # 4대 메트릭 요약
     m_col1, m_col2 = st.columns(2)
     with m_col1:
         st.metric("발굴 종목 수", f"{len(filtered_df)} 개")
@@ -291,7 +318,6 @@ if df is not None and not df.empty:
 
     st.markdown("---")
 
-    # 종목 카드 렌더링
     for idx, row in filtered_df.iterrows():
         score = row['total_score']
         badge_class = "badge-score-high" if score >= 70 else "badge-score-mid"
@@ -327,7 +353,6 @@ if df is not None and not df.empty:
             </div>
             """, unsafe_allow_html=True)
 
-            # 세부 펼치기 (차트 및 사유)
             with st.expander(f"🔍 **{row['name']}** 상세 분석 & 차트 열기", expanded=False):
                 st.markdown("##### 💡 포착 사유 & 반등 근거")
                 for reason in row['reasons']:
@@ -339,11 +364,11 @@ if df is not None and not df.empty:
                 st.markdown(f"- **PBR**: `{pbr_str}` | **PER**: `{per_str}`")
                 st.markdown(f"- **거래량 급증률**: `{row['vol_surge_ratio']:.2f}배` | **RSI(14)**: `{row['rsi']:.1f}`")
 
-                # 카카오톡 알림 보내기 버튼 & 네이버 증권 모바일 연결 버튼
                 btn_col1, btn_col2 = st.columns(2)
                 with btn_col1:
                     if st.button(f"💬 카톡전송", key=f"k_btn_{row['code']}", use_container_width=True):
-                        ok, msg = send_kakao_stock_alert(KAKAO_REST_API_KEY, row.to_dict())
+                        tk = st.session_state.kakao_token if st.session_state.kakao_token else KAKAO_REST_API_KEY
+                        ok, msg = send_kakao_stock_alert(tk, row.to_dict())
                         if ok:
                             st.toast(f"✅ {row['name']} 카카오톡 알림 발송 완료!", icon="💬")
                         else:
@@ -352,7 +377,6 @@ if df is not None and not df.empty:
                     naver_mobile_url = f"https://m.stock.naver.com/item/main.naver?code={row['code']}"
                     st.markdown(f'<a href="{naver_mobile_url}" target="_blank" class="naver-btn" style="margin-top:0; padding:6px 10px; font-size:0.85rem;">네이버증권 ↗</a>', unsafe_allow_html=True)
 
-                # Plotly 차트
                 df_chart = fetch_stock_ohlcv(row['code'], days=90)
                 if df_chart is not None and len(df_chart) > 0:
                     df_chart['MA5'] = df_chart['Close'].rolling(5).mean()
@@ -385,7 +409,6 @@ if df is not None and not df.empty:
                     )
                     st.plotly_chart(fig, use_container_width=True)
 
-    # CSV 다운로드
     csv_data = filtered_df.to_csv(index=False, encoding='utf-8-sig')
     st.download_button(
         label="📥 검색 결과 CSV 다운로드",
@@ -398,7 +421,6 @@ else:
     if not start_scan:
         st.info("👈 상단의 **[🚀 바닥 반등 종목 스캔 시작]** 버튼을 눌러주세요.")
 
-        # PWA 안내 카드
         st.markdown("""
         <div style="background-color:#EFF6FF; border:1px solid #BFDBFE; padding:12px; border-radius:10px; margin-top:15px;">
             <h4 style="margin:0 0 8px 0; color:#1D4ED8;">📱 스마트폰 홈 화면에 앱으로 추가하는 방법</h4>
