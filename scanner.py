@@ -5,7 +5,7 @@ from technical_indicators import analyze_technical_indicators
 from rebound_scorer import calculate_rebound_score
 import time
 
-def scan_single_stock(row, min_volume: int = 100000):
+def scan_single_stock(row, min_volume: int = 10000):
     code = str(row['code']).zfill(6)
     name = row.get('name', '')
     market = row.get('market', '')
@@ -21,7 +21,7 @@ def scan_single_stock(row, min_volume: int = 100000):
     if not tech_data:
         return None
         
-    # 거래량 필터 (최소 거래량 미만인 저유동성/유령주 제외)
+    # 거래량 필터 (최소 거래량 1만주 미만 극초저유동성 종목만 1차 제외)
     vol = tech_data.get('volume', 0)
     if vol < min_volume:
         return None
@@ -62,9 +62,9 @@ def scan_single_stock(row, min_volume: int = 100000):
         "naver_link": f"https://finance.naver.com/item/main.naver?code={code}"
     }
 
-def run_stock_scan(market="ALL", top_n=200, min_volume=100000, progress_callback=None) -> pd.DataFrame:
+def run_stock_scan(market="ALL", top_n=200, min_volume=10000, progress_callback=None) -> pd.DataFrame:
     """
-    시장(KOSPI, KOSDAQ, ALL)의 시총 상위 top_n개 종목을 대상으로 바닥 반등 종목 스캔 (최소 거래량 min_volume 적용)
+    시장(KOSPI, KOSDAQ, ALL)의 시총 상위 top_n개 종목을 대상으로 바닥 반등 종목 스캔 (기본 1만주 이상 수집)
     """
     df_stocks = get_stock_list(market=market)
     if df_stocks.empty:

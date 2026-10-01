@@ -244,7 +244,7 @@ with st.expander("⚙️ **스캔 필터 & 카카오 알림 설정**", expanded=
     min_vol_val = st.select_slider(
         "⚡ 최소 일 거래량 필터 (저유동성 종목 제외)",
         options=[0, 50000, 100000, 200000, 500000, 1000000],
-        value=100000,
+        value=50000,
         format_func=lambda x: "제한 없음" if x == 0 else f"{x//10000}만 주 이상"
     )
 
@@ -290,7 +290,7 @@ if start_scan:
         status_text.text(f"종목 수집 및 반등 분석 중... ({curr}/{total} 완료)")
 
     start_time = datetime.now()
-    df_result = run_stock_scan(market=selected_market, top_n=top_n, min_volume=min_vol_val, progress_callback=update_progress)
+    df_result = run_stock_scan(market=selected_market, top_n=top_n, min_volume=10000, progress_callback=update_progress)
     elapsed = (datetime.now() - start_time).total_seconds()
 
     progress_bar.empty()
