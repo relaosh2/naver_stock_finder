@@ -240,6 +240,13 @@ with st.expander("⚙️ **스캔 필터 & 카카오 알림 설정**", expanded=
 
     top_n = st.slider("시총 상위 탐색 범위", min_value=30, max_value=300, value=100, step=10)
     min_score = st.slider("최소 반등 점수", min_value=35, max_value=85, value=45, step=5)
+    
+    min_vol_val = st.select_slider(
+        "⚡ 최소 일 거래량 필터 (저유동성 종목 제외)",
+        options=[0, 50000, 100000, 200000, 500000, 1000000],
+        value=100000,
+        format_func=lambda x: "제한 없음" if x == 0 else f"{x//10000}만 주 이상"
+    )
 
     req_foreign_buy = st.checkbox("외국인 최근 3일 순매수", value=(st.session_state.active_preset == "DOUBLE"))
     req_organ_buy = st.checkbox("기관 최근 3일 순매수", value=(st.session_state.active_preset == "DOUBLE"))
@@ -283,7 +290,7 @@ if start_scan:
         status_text.text(f"종목 수집 및 반등 분석 중... ({curr}/{total} 완료)")
 
     start_time = datetime.now()
-    df_result = run_stock_scan(market=selected_market, top_n=top_n, progress_callback=update_progress)
+    df_result = run_stock_scan(market=selected_market, top_n=top_n, min_volume=min_vol_val, progress_callback=update_progress)
     elapsed = (datetime.now() - start_time).total_seconds()
 
     progress_bar.empty()
@@ -299,6 +306,8 @@ df = st.session_state.scan_data
 if df is not None and not df.empty:
     filtered_df = df[df['total_score'] >= min_score].copy()
 
+    if min_vol_val > 0 and 'volume' in filtered_df.columns:
+        filtered_df = filtered_df[filtered_df['volume'] >= min_vol_val]
     if req_foreign_buy:
         filtered_df = filtered_df[filtered_df['foreign_buy_3d'] > 0]
     if req_organ_buy:
@@ -324,6 +333,7 @@ if df is not None and not df.empty:
     for idx, row in filtered_df.iterrows():
         score = row['total_score']
         badge_class = "badge-score-high" if score >= 70 else "badge-score-mid"
+        vol_str = f"{row['volume']/10000:.1f}만 주" if 'volume' in row and pd.notnull(row['volume']) else "-"
         
         with st.container():
             st.markdown(f"""
@@ -337,8 +347,8 @@ if df is not None and not df.empty:
                 </div>
                 <div class="metric-grid">
                     <div class="metric-item">
-                        <div class="metric-label">현재가</div>
-                        <div class="metric-val" style="color:#EF4444;">{row['current_price']:,}원</div>
+                        <div class="metric-label">현재가 / 최근거래량</div>
+                        <div class="metric-val" style="color:#EF4444;">{row['current_price']:,}원 <span style="font-size:0.75rem; color:#475569;">({vol_str})</span></div>
                     </div>
                     <div class="metric-item">
                         <div class="metric-label">52주 최저 이격률</div>

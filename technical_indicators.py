@@ -92,6 +92,8 @@ def analyze_technical_indicators(df: pd.DataFrame) -> dict:
     
     return {
         "current_price": curr_close,
+        "volume": int(curr['Volume']),
+        "vol_ma20": int(vol_ma20),
         "high_52w": high_52w,
         "low_52w": low_52w,
         "diff_from_52w_low_pct": diff_from_52w_low_pct,
