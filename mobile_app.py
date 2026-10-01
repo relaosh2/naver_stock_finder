@@ -210,25 +210,41 @@ if 'scan_data' not in st.session_state:
     st.session_state.scan_data = None
 if 'active_preset' not in st.session_state:
     st.session_state.active_preset = "ALL"
+if 'watchlist' not in st.session_state:
+    st.session_state.watchlist = {}
 
 # -----------------------------------------------------------------------------
-# 전략 터치 프리셋 (Quick Pills)
+# 메인 뷰 선택 (스캔 vs 관심종목)
 # -----------------------------------------------------------------------------
-st.markdown("##### ⚡ 1-Tap 추천 전략 프리셋")
-p_col1, p_col2, p_col3, p_col4 = st.columns(4)
+v_col1, v_col2 = st.columns(2)
+with v_col1:
+    show_watchlist = st.checkbox(f"⭐ 내 관심종목 ({len(st.session_state.watchlist)})", value=False)
+with v_col2:
+    if show_watchlist and len(st.session_state.watchlist) > 0:
+        if st.button("🗑️ 관심종목 전체 삭제", use_container_width=True):
+            st.session_state.watchlist = {}
+            st.toast("🗑️ 관심종목이 모두 삭제되었습니다.", icon="🗑️")
+            st.rerun()
 
-with p_col1:
-    if st.button("🔥 쌍끌이", use_container_width=True, help="외국인+기관 동시 순매수"):
-        st.session_state.active_preset = "DOUBLE"
-with p_col2:
-    if st.button("💥 거래량", use_container_width=True, help="거래량 1.5배 이상 폭증"):
-        st.session_state.active_preset = "VOL"
-with p_col3:
-    if st.button("🛡️ 저PBR", use_container_width=True, help="PBR 1.0 이하 저평가"):
-        st.session_state.active_preset = "PBR"
-with p_col4:
-    if st.button("⚡ 과매도", use_container_width=True, help="RSI 35 이하 단기과매도"):
-        st.session_state.active_preset = "RSI"
+if not show_watchlist:
+    # -----------------------------------------------------------------------------
+    # 전략 터치 프리셋 (Quick Pills)
+    # -----------------------------------------------------------------------------
+    st.markdown("##### ⚡ 1-Tap 추천 전략 프리셋")
+    p_col1, p_col2, p_col3, p_col4 = st.columns(4)
+
+    with p_col1:
+        if st.button("🔥 쌍끌이", use_container_width=True, help="외국인+기관 동시 순매수"):
+            st.session_state.active_preset = "DOUBLE"
+    with p_col2:
+        if st.button("💥 거래량", use_container_width=True, help="거래량 1.5배 이상 폭증"):
+            st.session_state.active_preset = "VOL"
+    with p_col3:
+        if st.button("🛡️ 저PBR", use_container_width=True, help="PBR 1.0 이하 저평가"):
+            st.session_state.active_preset = "PBR"
+    with p_col4:
+        if st.button("⚡ 과매도", use_container_width=True, help="RSI 35 이하 단기과매도"):
+            st.session_state.active_preset = "RSI"
 
 # -----------------------------------------------------------------------------
 # 검색 옵션 & 필터 (접이식 Expander)
@@ -276,170 +292,221 @@ with st.expander("⚙️ **스캔 필터 & 카카오 알림 설정**", expanded=
             st.error(msg)
 
 # -----------------------------------------------------------------------------
-# 스캔 실행 버튼
+# 공용 종목 카드 렌더러 함수
 # -----------------------------------------------------------------------------
-start_scan = st.button("🚀 **바닥 반등 종목 스캔 시작**", type="primary", use_container_width=True)
+def render_stock_card(row, is_watchlist_view=False):
+    score = row['total_score']
+    badge_class = "badge-score-high" if score >= 70 else "badge-score-mid"
+    vol_str = f"{row['volume']/10000:.1f}만 주" if 'volume' in row and pd.notnull(row['volume']) else "-"
+    code = row['code']
+    name = row['name']
+    
+    short_status = row.get('short_status', '📊 공매도 중립')
+    short_bg = row.get('short_badge_color', '#F1F5F9')
+    short_tc = row.get('short_text_color', '#475569')
+    short_desc = row.get('short_desc', '수급 및 공매도 추이 중립 횡보 구간')
 
-if start_scan:
-    progress_bar = st.progress(0)
-    status_text = st.empty()
+    is_fav = code in st.session_state.watchlist
 
-    def update_progress(curr, total):
-        pct = int((curr / total) * 100)
-        progress_bar.progress(pct)
-        status_text.text(f"종목 수집 및 반등 분석 중... ({curr}/{total} 완료)")
+    with st.container():
+        st.markdown(f"""
+        <div class="stock-card">
+            <div class="stock-card-header">
+                <div>
+                    <span class="stock-name">{name}</span>
+                    <span class="stock-code">({code}) • {row.get('market', 'KRX')}</span>
+                </div>
+                <div class="{badge_class}">{score}점 [{row['grade']}]</div>
+            </div>
+            <div style="background-color:{short_bg}; color:{short_tc}; padding:5px 10px; border-radius:6px; font-size:0.8rem; font-weight:bold; margin-bottom:8px;">
+                📉 공매도·수급: {short_status}
+            </div>
+            <div class="metric-grid">
+                <div class="metric-item">
+                    <div class="metric-label">현재가 / 최근거래량</div>
+                    <div class="metric-val" style="color:#EF4444;">{row['current_price']:,}원 <span style="font-size:0.75rem; color:#475569;">({vol_str})</span></div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">52주 최저 이격률</div>
+                    <div class="metric-val">+{row['diff_from_52w_low_pct']:.1f}%</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">외인 3일 순매수</div>
+                    <div class="metric-val" style="color:#10B981;">{row['foreign_buy_3d']:+,}주</div>
+                </div>
+                <div class="metric-item">
+                    <div class="metric-label">기관 3일 순매수</div>
+                    <div class="metric-val" style="color:#10B981;">{row['organ_buy_3d']:+,}주</div>
+                </div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-    start_time = datetime.now()
-    df_result = run_stock_scan(market=selected_market, top_n=top_n, min_volume=10000, progress_callback=update_progress)
-    elapsed = (datetime.now() - start_time).total_seconds()
+        w_col1, w_col2, w_col3 = st.columns([1.2, 1.2, 1.6])
+        with w_col1:
+            if is_fav:
+                if st.button("⭐ 관심해제", key=f"fav_btn_{code}_{is_watchlist_view}", use_container_width=True):
+                    del st.session_state.watchlist[code]
+                    st.toast(f"🗑️ [{name}] 관심종목에서 삭제되었습니다.", icon="🗑️")
+                    st.rerun()
+            else:
+                if st.button("⭐ 관심추가", key=f"fav_btn_{code}_{is_watchlist_view}", use_container_width=True):
+                    st.session_state.watchlist[code] = row.to_dict() if hasattr(row, 'to_dict') else dict(row)
+                    st.toast(f"⭐ [{name}] 관심종목에 추가되었습니다!", icon="⭐")
+                    st.rerun()
+        with w_col2:
+            if st.button("💬 카톡전송", key=f"k_btn_{code}_{is_watchlist_view}", use_container_width=True):
+                tk = st.session_state.kakao_token if st.session_state.kakao_token else KAKAO_REST_API_KEY
+                row_dict = row.to_dict() if hasattr(row, 'to_dict') else dict(row)
+                ok, msg = send_kakao_stock_alert(tk, row_dict)
+                if ok:
+                    st.toast(f"✅ {name} 카카오톡 알림 발송 완료!", icon="💬")
+                else:
+                    st.error(msg)
+        with w_col3:
+            naver_mobile_url = f"https://m.stock.naver.com/item/main.naver?code={code}"
+            st.markdown(f'<a href="{naver_mobile_url}" target="_blank" class="naver-btn" style="margin-top:0; padding:6px 8px; font-size:0.8rem;">네이버증권 ↗</a>', unsafe_allow_html=True)
 
-    progress_bar.empty()
-    status_text.empty()
-    st.session_state.scan_data = df_result
-    st.toast(f"✅ {len(df_result)}개 종목 발굴 완료! ({elapsed:.1f}초)", icon="📈")
+        with st.expander(f"🔍 **{name}** 상세 분석 & 차트 열기", expanded=False):
+            st.markdown("##### 💡 포착 사유 & 반등 근거")
+            for reason in row['reasons']:
+                st.markdown(f"- {reason}")
 
-# -----------------------------------------------------------------------------
-# 결과 모바일 종목 카드 리스트
-# -----------------------------------------------------------------------------
-df = st.session_state.scan_data
-
-if df is not None and not df.empty:
-    filtered_df = df[df['total_score'] >= min_score].copy()
-
-    if min_vol_val > 0 and 'volume' in filtered_df.columns:
-        filtered_df = filtered_df[filtered_df['volume'] >= min_vol_val]
-    if req_foreign_buy:
-        filtered_df = filtered_df[filtered_df['foreign_buy_3d'] > 0]
-    if req_organ_buy:
-        filtered_df = filtered_df[filtered_df['organ_buy_3d'] > 0]
-    if req_double_buy:
-        filtered_df = filtered_df[(filtered_df['foreign_buy_3d'] > 0) & (filtered_df['organ_buy_3d'] > 0)]
-    if req_vol_surge:
-        filtered_df = filtered_df[filtered_df['vol_surge_ratio'] >= 1.3]
-    if req_low_pbr:
-        filtered_df = filtered_df[filtered_df['pbr'].notnull() & (filtered_df['pbr'] <= 1.0)]
-
-    st.markdown(f"### 🎯 조건 만족 종목 ({len(filtered_df)}건)")
-
-    m_col1, m_col2 = st.columns(2)
-    with m_col1:
-        st.metric("발굴 종목 수", f"{len(filtered_df)} 개")
-    with m_col2:
-        high_cnt = len(filtered_df[filtered_df['total_score'] >= 70])
-        st.metric("강력 반등 (70점+)", f"{high_cnt} 개")
-
-    st.markdown("---")
-
-    for idx, row in filtered_df.iterrows():
-        score = row['total_score']
-        badge_class = "badge-score-high" if score >= 70 else "badge-score-mid"
-        vol_str = f"{row['volume']/10000:.1f}만 주" if 'volume' in row and pd.notnull(row['volume']) else "-"
-        
-        with st.container():
+            st.markdown("##### 📉 공매도 & 숏커버링 종합 분석")
             st.markdown(f"""
-            <div class="stock-card">
-                <div class="stock-card-header">
-                    <div>
-                        <span class="stock-name">{row['name']}</span>
-                        <span class="stock-code">({row['code']}) • {row['market']}</span>
-                    </div>
-                    <div class="{badge_class}">{score}점 [{row['grade']}]</div>
-                </div>
-                <div class="metric-grid">
-                    <div class="metric-item">
-                        <div class="metric-label">현재가 / 최근거래량</div>
-                        <div class="metric-val" style="color:#EF4444;">{row['current_price']:,}원 <span style="font-size:0.75rem; color:#475569;">({vol_str})</span></div>
-                    </div>
-                    <div class="metric-item">
-                        <div class="metric-label">52주 최저 이격률</div>
-                        <div class="metric-val">+{row['diff_from_52w_low_pct']:.1f}%</div>
-                    </div>
-                    <div class="metric-item">
-                        <div class="metric-label">외인 3일 순매수</div>
-                        <div class="metric-val" style="color:#10B981;">{row['foreign_buy_3d']:+,}주</div>
-                    </div>
-                    <div class="metric-item">
-                        <div class="metric-label">기관 3일 순매수</div>
-                        <div class="metric-val" style="color:#10B981;">{row['organ_buy_3d']:+,}주</div>
-                    </div>
-                </div>
+            <div style="background-color:{short_bg}; padding:10px; border-radius:8px; border-left:4px solid {short_tc}; margin-bottom:10px;">
+                <strong style="color:{short_tc}; font-size:0.95rem;">{short_status}</strong><br>
+                <span style="font-size:0.85rem; color:#334155;">{short_desc}</span>
             </div>
             """, unsafe_allow_html=True)
 
-            with st.expander(f"🔍 **{row['name']}** 상세 분석 & 차트 열기", expanded=False):
-                st.markdown("##### 💡 포착 사유 & 반등 근거")
-                for reason in row['reasons']:
-                    st.markdown(f"- {reason}")
+            st.markdown("##### 📊 수급 및 가치 지표")
+            pbr_val = row.get('pbr')
+            per_val = row.get('per')
+            pbr_str = f"{pbr_val:.2f}배" if pd.notnull(pbr_val) else "-"
+            per_str = f"{per_val:.1f}배" if pd.notnull(per_val) else "-"
+            st.markdown(f"- **PBR**: `{pbr_str}` | **PER**: `{per_str}`")
+            st.markdown(f"- **거래량 급증률**: `{row['vol_surge_ratio']:.2f}배` | **RSI(14)**: `{row['rsi']:.1f}`")
 
-                st.markdown("##### 📊 수급 및 가치 지표")
-                pbr_str = f"{row['pbr']:.2f}배" if pd.notnull(row['pbr']) else "-"
-                per_str = f"{row['per']:.1f}배" if pd.notnull(row['per']) else "-"
-                st.markdown(f"- **PBR**: `{pbr_str}` | **PER**: `{per_str}`")
-                st.markdown(f"- **거래량 급증률**: `{row['vol_surge_ratio']:.2f}배` | **RSI(14)**: `{row['rsi']:.1f}`")
+            df_chart = fetch_stock_ohlcv(code, days=90)
+            if df_chart is not None and len(df_chart) > 0:
+                df_chart['MA5'] = df_chart['Close'].rolling(5).mean()
+                df_chart['MA20'] = df_chart['Close'].rolling(20).mean()
+                df_chart['RSI'] = calculate_rsi(df_chart['Close'], 14)
+                upper, mid, lower, _ = calculate_bollinger_bands(df_chart['Close'], 20, 2.0)
+                df_chart['BB_Upper'] = upper
+                df_chart['BB_Lower'] = lower
 
-                btn_col1, btn_col2 = st.columns(2)
-                with btn_col1:
-                    if st.button(f"💬 카톡전송", key=f"k_btn_{row['code']}", use_container_width=True):
-                        tk = st.session_state.kakao_token if st.session_state.kakao_token else KAKAO_REST_API_KEY
-                        ok, msg = send_kakao_stock_alert(tk, row.to_dict())
-                        if ok:
-                            st.toast(f"✅ {row['name']} 카카오톡 알림 발송 완료!", icon="💬")
-                        else:
-                            st.error(msg)
-                with btn_col2:
-                    naver_mobile_url = f"https://m.stock.naver.com/item/main.naver?code={row['code']}"
-                    st.markdown(f'<a href="{naver_mobile_url}" target="_blank" class="naver-btn" style="margin-top:0; padding:6px 10px; font-size:0.85rem;">네이버증권 ↗</a>', unsafe_allow_html=True)
+                fig = make_subplots(
+                    rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05,
+                    subplot_titles=(f"{name} 일봉 차트", "RSI (14)"),
+                    row_heights=[0.7, 0.3]
+                )
+                fig.add_trace(go.Candlestick(
+                    x=df_chart.index, open=df_chart['Open'], high=df_chart['High'],
+                    low=df_chart['Low'], close=df_chart['Close'], name="주가",
+                    increasing_line_color='#EF4444', decreasing_line_color='#3B82F6'
+                ), row=1, col=1)
+                fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['MA5'], name="5일선", line=dict(color='orange', width=1)), row=1, col=1)
+                fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['MA20'], name="20일선", line=dict(color='green', width=1.5)), row=1, col=1)
+                fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['BB_Lower'], name="BB 하단", line=dict(color='red', dash='dash')), row=1, col=1)
 
-                df_chart = fetch_stock_ohlcv(row['code'], days=90)
-                if df_chart is not None and len(df_chart) > 0:
-                    df_chart['MA5'] = df_chart['Close'].rolling(5).mean()
-                    df_chart['MA20'] = df_chart['Close'].rolling(20).mean()
-                    df_chart['RSI'] = calculate_rsi(df_chart['Close'], 14)
-                    upper, mid, lower, _ = calculate_bollinger_bands(df_chart['Close'], 20, 2.0)
-                    df_chart['BB_Upper'] = upper
-                    df_chart['BB_Lower'] = lower
+                fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['RSI'], name="RSI", line=dict(color='#8B5CF6')), row=2, col=1)
+                fig.add_hline(y=30, line_dash="dash", line_color="red", row=2, col=1)
 
-                    fig = make_subplots(
-                        rows=2, cols=1, shared_xaxes=True, vertical_spacing=0.05,
-                        subplot_titles=(f"{row['name']} 일봉 차트", "RSI (14)"),
-                        row_heights=[0.7, 0.3]
-                    )
-                    fig.add_trace(go.Candlestick(
-                        x=df_chart.index, open=df_chart['Open'], high=df_chart['High'],
-                        low=df_chart['Low'], close=df_chart['Close'], name="주가",
-                        increasing_line_color='#EF4444', decreasing_line_color='#3B82F6'
-                    ), row=1, col=1)
-                    fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['MA5'], name="5일선", line=dict(color='orange', width=1)), row=1, col=1)
-                    fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['MA20'], name="20일선", line=dict(color='green', width=1.5)), row=1, col=1)
-                    fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['BB_Lower'], name="BB 하단", line=dict(color='red', dash='dash')), row=1, col=1)
+                fig.update_layout(
+                    height=420, margin=dict(l=10, r=10, t=30, b=10),
+                    showlegend=False, xaxis_rangeslider_visible=False
+                )
+                st.plotly_chart(fig, use_container_width=True)
 
-                    fig.add_trace(go.Scatter(x=df_chart.index, y=df_chart['RSI'], name="RSI", line=dict(color='#8B5CF6')), row=2, col=1)
-                    fig.add_hline(y=30, line_dash="dash", line_color="red", row=2, col=1)
-
-                    fig.update_layout(
-                        height=420, margin=dict(l=10, r=10, t=30, b=10),
-                        showlegend=False, xaxis_rangeslider_visible=False
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-
-    csv_data = filtered_df.to_csv(index=False, encoding='utf-8-sig')
-    st.download_button(
-        label="📥 검색 결과 CSV 다운로드",
-        data=csv_data,
-        file_name=f"바닥_반등_모바일_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
-        mime="text/csv",
-        use_container_width=True
-    )
+# -----------------------------------------------------------------------------
+# 관심종목 뷰 또는 스캔 뷰 렌더링
+# -----------------------------------------------------------------------------
+if show_watchlist:
+    st.markdown(f"### ⭐ 내 관심종목 리스트 ({len(st.session_state.watchlist)}건)")
+    if not st.session_state.watchlist:
+        st.info("⭐ 아직 관심종목이 등록되지 않았습니다.\n\n스캔 결과에서 종목 카드 상단의 **[⭐ 관심추가]** 버튼을 누르면 나만의 관심종목으로 저장할 수 있습니다!")
+    else:
+        for code, item in list(st.session_state.watchlist.items()):
+            render_stock_card(item, is_watchlist_view=True)
 else:
-    if not start_scan:
-        st.info("👈 상단의 **[🚀 바닥 반등 종목 스캔 시작]** 버튼을 눌러주세요.")
+    # -----------------------------------------------------------------------------
+    # 스캔 실행 버튼
+    # -----------------------------------------------------------------------------
+    start_scan = st.button("🚀 **바닥 반등 종목 스캔 시작**", type="primary", use_container_width=True)
 
-        st.markdown("""
-        <div style="background-color:#EFF6FF; border:1px solid #BFDBFE; padding:12px; border-radius:10px; margin-top:15px;">
-            <h4 style="margin:0 0 8px 0; color:#1D4ED8;">📱 스마트폰 홈 화면에 앱으로 추가하는 방법</h4>
-            <ol style="margin:0; padding-left:20px; font-size:0.85rem; color:#1E40AF;">
-                <li><b>Android (Chrome)</b>: 브라우저 우측 상단 <b>[⋮] 메뉴</b> → <b>[홈 화면에 추가]</b> 선택</li>
-                <li><b>iPhone (Safari)</b>: 하단 <b>[공유] 버튼</b> → <b>[홈 화면에 추가]</b> 선택</li>
-            </ol>
-        </div>
-        """, unsafe_allow_html=True)
+    if start_scan:
+        progress_bar = st.progress(0)
+        status_text = st.empty()
+
+        def update_progress(curr, total):
+            pct = int((curr / total) * 100)
+            progress_bar.progress(pct)
+            status_text.text(f"종목 수집 및 반등 분석 중... ({curr}/{total} 완료)")
+
+        start_time = datetime.now()
+        df_result = run_stock_scan(market=selected_market, top_n=top_n, min_volume=10000, progress_callback=update_progress)
+        elapsed = (datetime.now() - start_time).total_seconds()
+
+        progress_bar.empty()
+        status_text.empty()
+        st.session_state.scan_data = df_result
+        st.toast(f"✅ {len(df_result)}개 종목 발굴 완료! ({elapsed:.1f}초)", icon="📈")
+
+    # -----------------------------------------------------------------------------
+    # 결과 모바일 종목 카드 리스트
+    # -----------------------------------------------------------------------------
+    df = st.session_state.scan_data
+
+    if df is not None and not df.empty:
+        filtered_df = df[df['total_score'] >= min_score].copy()
+
+        if min_vol_val > 0 and 'volume' in filtered_df.columns:
+            filtered_df = filtered_df[filtered_df['volume'] >= min_vol_val]
+        if req_foreign_buy:
+            filtered_df = filtered_df[filtered_df['foreign_buy_3d'] > 0]
+        if req_organ_buy:
+            filtered_df = filtered_df[filtered_df['organ_buy_3d'] > 0]
+        if req_double_buy:
+            filtered_df = filtered_df[(filtered_df['foreign_buy_3d'] > 0) & (filtered_df['organ_buy_3d'] > 0)]
+        if req_vol_surge:
+            filtered_df = filtered_df[filtered_df['vol_surge_ratio'] >= 1.3]
+        if req_low_pbr:
+            filtered_df = filtered_df[filtered_df['pbr'].notnull() & (filtered_df['pbr'] <= 1.0)]
+
+        st.markdown(f"### 🎯 조건 만족 종목 ({len(filtered_df)}건)")
+
+        m_col1, m_col2 = st.columns(2)
+        with m_col1:
+            st.metric("발굴 종목 수", f"{len(filtered_df)} 개")
+        with m_col2:
+            high_cnt = len(filtered_df[filtered_df['total_score'] >= 70])
+            st.metric("강력 반등 (70점+)", f"{high_cnt} 개")
+
+        st.markdown("---")
+
+        for idx, row in filtered_df.iterrows():
+            render_stock_card(row, is_watchlist_view=False)
+
+        csv_data = filtered_df.to_csv(index=False, encoding='utf-8-sig')
+        st.download_button(
+            label="📥 검색 결과 CSV 다운로드",
+            data=csv_data,
+            file_name=f"바닥_반등_모바일_{datetime.now().strftime('%Y%m%d_%H%M')}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    else:
+        if not start_scan:
+            st.info("👈 상단의 **[🚀 바닥 반등 종목 스캔 시작]** 버튼을 눌러주세요.")
+
+            st.markdown("""
+            <div style="background-color:#EFF6FF; border:1px solid #BFDBFE; padding:12px; border-radius:10px; margin-top:15px;">
+                <h4 style="margin:0 0 8px 0; color:#1D4ED8;">📱 스마트폰 홈 화면에 앱으로 추가하는 방법</h4>
+                <ol style="margin:0; padding-left:20px; font-size:0.85rem; color:#1E40AF;">
+                    <li><b>Android (Chrome)</b>: 브라우저 우측 상단 <b>[⋮] 메뉴</b> → <b>[홈 화면에 추가]</b> 선택</li>
+                    <li><b>iPhone (Safari)</b>: 하단 <b>[공유] 버튼</b> → <b>[홈 화면에 추가]</b> 선택</li>
+                </ol>
+            </div>
+            """, unsafe_allow_html=True)

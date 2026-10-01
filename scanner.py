@@ -3,6 +3,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from data_fetcher import get_stock_list, fetch_naver_stock_info, fetch_stock_ohlcv
 from technical_indicators import analyze_technical_indicators
 from rebound_scorer import calculate_rebound_score
+from short_sale_analyzer import analyze_short_sale_status
 import time
 
 def scan_single_stock(row, min_volume: int = 10000):
@@ -38,6 +39,9 @@ def scan_single_stock(row, min_volume: int = 10000):
     # 4. 반등 점수 계산
     score_result = calculate_rebound_score(tech_data, naver_info)
     
+    # 5. 공매도 & 숏커버링 현황 분석
+    short_info = analyze_short_sale_status(tech_data, naver_info)
+    
     return {
         "code": code,
         "name": name,
@@ -58,6 +62,11 @@ def scan_single_stock(row, min_volume: int = 10000):
         "total_score": score_result['total_score'],
         "grade": score_result['grade'],
         "reasons": score_result['reasons'],
+        "short_status": short_info['short_status'],
+        "short_badge_color": short_info['short_badge_color'],
+        "short_text_color": short_info['short_text_color'],
+        "short_desc": short_info['short_desc'],
+        "is_short_squeeze": short_info['is_short_squeeze'],
         "marcap": marcap,
         "naver_link": f"https://finance.naver.com/item/main.naver?code={code}"
     }
