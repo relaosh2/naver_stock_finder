@@ -4,6 +4,7 @@ from data_fetcher import get_stock_list, fetch_naver_stock_info, fetch_stock_ohl
 from technical_indicators import analyze_technical_indicators
 from rebound_scorer import calculate_rebound_score
 from short_sale_analyzer import analyze_short_sale_status
+from trend_issue_analyzer import fetch_stock_trend_issues
 import time
 
 def scan_single_stock(row, min_volume: int = 10000):
@@ -36,10 +37,13 @@ def scan_single_stock(row, min_volume: int = 10000):
     if naver_info.get("is_restricted"):
         return None  # 투자주의 / 투자경고 / 투자위험 / 관리종목 / 거래정지 2차 제외
     
-    # 4. 반등 점수 계산
-    score_result = calculate_rebound_score(tech_data, naver_info)
+    # 4. 최신 시장 트렌드 & 뉴스 이슈 감성 분석
+    trend_info = fetch_stock_trend_issues(code)
+
+    # 5. 반등 점수 계산 (트렌드/이슈 포함)
+    score_result = calculate_rebound_score(tech_data, naver_info, trend_info)
     
-    # 5. 공매도 & 숏커버링 현황 분석
+    # 6. 공매도 & 숏커버링 현황 분석
     short_info = analyze_short_sale_status(tech_data, naver_info)
     
     return {
@@ -62,6 +66,9 @@ def scan_single_stock(row, min_volume: int = 10000):
         "total_score": score_result['total_score'],
         "grade": score_result['grade'],
         "reasons": score_result['reasons'],
+        "trend_score": trend_info.get('trend_score', 0),
+        "matched_themes": trend_info.get('matched_themes', []),
+        "recent_news": trend_info.get('recent_news', []),
         "short_status": short_info['short_status'],
         "short_badge_color": short_info['short_badge_color'],
         "short_text_color": short_info['short_text_color'],

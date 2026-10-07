@@ -2,7 +2,7 @@ import pandas as pd
 import numpy as np
 from technical_indicators import analyze_technical_indicators
 
-def calculate_rebound_score(tech_data: dict, naver_info: dict) -> dict:
+def calculate_rebound_score(tech_data: dict, naver_info: dict, trend_info: dict = None) -> dict:
     """
     바닥 여부 및 향후 상승 확률(반등 스코어) 종합 산출
     - 총점 100점 만점
@@ -12,6 +12,19 @@ def calculate_rebound_score(tech_data: dict, naver_info: dict) -> dict:
     
     score = 0
     reasons = []
+    
+    # -------------------------------------------------------------
+    # 1. 최신 시장 트렌드 & 뉴스 이슈 가산점 (-10 ~ +15점)
+    # -------------------------------------------------------------
+    if trend_info:
+        t_score = trend_info.get("trend_score", 0)
+        score += t_score
+        pos_r = trend_info.get("pos_reasons", [])
+        neg_r = trend_info.get("neg_reasons", [])
+        for pr in pos_r:
+            reasons.append(pr)
+        for nr in neg_r:
+            reasons.append(nr)
     
     # -------------------------------------------------------------
     # 1. 바닥성 점수 (총 35점)

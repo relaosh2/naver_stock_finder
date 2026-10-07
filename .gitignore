@@ -6,3 +6,7 @@ dist/
 *.csv
 .streamlit/secrets.toml
 .venv/
+*.apk
+*.zip
+scratch/
+android_farm_app/

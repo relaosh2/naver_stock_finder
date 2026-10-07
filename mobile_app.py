@@ -308,6 +308,17 @@ def render_stock_card(row, is_watchlist_view=False):
 
     is_fav = code in st.session_state.watchlist
 
+    matched_themes = row.get('matched_themes', [])
+    trend_score = row.get('trend_score', 0)
+    theme_html = ""
+    if matched_themes:
+        themes_str = ", ".join(matched_themes)
+        theme_html = f"""
+        <div style="background-color:#FFFBEB; color:#B45309; padding:4px 8px; border-radius:6px; font-size:0.8rem; font-weight:bold; margin-bottom:6px; border:1px solid #FDE68A;">
+            🔥 핫 트렌드 테마: {themes_str} (+{trend_score}점 가산)
+        </div>
+        """
+
     with st.container():
         st.markdown(f"""
         <div class="stock-card">
@@ -318,6 +329,7 @@ def render_stock_card(row, is_watchlist_view=False):
                 </div>
                 <div class="{badge_class}">{score}점 [{row['grade']}]</div>
             </div>
+            {theme_html}
             <div style="background-color:{short_bg}; color:{short_tc}; padding:5px 10px; border-radius:6px; font-size:0.8rem; font-weight:bold; margin-bottom:8px;">
                 📉 공매도·수급: {short_status}
             </div>
@@ -371,6 +383,12 @@ def render_stock_card(row, is_watchlist_view=False):
             st.markdown("##### 💡 포착 사유 & 반등 근거")
             for reason in row['reasons']:
                 st.markdown(f"- {reason}")
+
+            recent_news = row.get('recent_news', [])
+            if recent_news:
+                st.markdown("##### 📰 최신 트렌드 이슈 & 실시간 뉴스")
+                for news in recent_news:
+                    st.markdown(f"- 📰 <a href='{news[\"url\"]}' target='_blank' style='color:#2563EB; text-decoration:none; font-weight:600;'>{news[\"title\"]} ↗</a>", unsafe_allow_html=True)
 
             st.markdown("##### 📉 공매도 & 숏커버링 종합 분석")
             st.markdown(f"""
