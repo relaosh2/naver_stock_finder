@@ -18,7 +18,6 @@ try:
 except Exception:
     pass
 
-
 st.markdown("""
 <style>
     .stApp {
@@ -95,7 +94,7 @@ def parse_kakaotalk_chat(text: str) -> pd.DataFrame:
         if not line:
             continue
             
-        # 날짜 구분선 감지 (예: --------------- 2026년 10월 8일 목요일 ---------------)
+        # 날짜 구분선 감지
         date_match = re.search(r'(\d{4})년\s*(\d{1,2})월\s*(\d{1,2})일', line)
         if date_match:
             y, m, d = date_match.groups()
@@ -151,37 +150,42 @@ def parse_kakaotalk_chat(text: str) -> pd.DataFrame:
     return df
 
 # -----------------------------------------------------------------------------
-# 호감도 분석 엔진
+# 호감도 분석 엔진 (3인 이상 단톡방 1:1 두 사람 선택 지정 지원)
 # -----------------------------------------------------------------------------
-def analyze_romance_affection(df: pd.DataFrame):
+def analyze_romance_affection(df: pd.DataFrame, target_s1: str = None, target_s2: str = None):
     if df.empty:
         return None
 
-    senders = df['sender'].unique()
+    senders = list(df['sender'].unique())
     if len(senders) < 2:
         return None
 
-    s1, s2 = senders[0], senders[1]
-    
+    # 지정 대상 세팅
+    s1 = target_s1 if target_s1 and target_s1 in senders else senders[0]
+    s2 = target_s2 if target_s2 and target_s2 in senders else (senders[1] if len(senders) > 1 else senders[0])
+
+    if s1 == s2:
+        for s in senders:
+            if s != s1:
+                s2 = s
+                break
+
     df1 = df[df['sender'] == s1]
     df2 = df[df['sender'] == s2]
     
-    # 1. 메시지 지분율 & 글자수 지분율
-    total_msgs = len(df)
     cnt1, cnt2 = len(df1), len(df2)
-    pct1 = round((cnt1 / total_msgs) * 100, 1)
-    pct2 = round((cnt2 / total_msgs) * 100, 1)
+    pair_total = max(1, cnt1 + cnt2)
+    pct1 = round((cnt1 / pair_total) * 100, 1)
+    pct2 = round((cnt2 / pair_total) * 100, 1)
     
     avg_len1 = round(df1['char_len'].mean(), 1) if not df1.empty else 0
     avg_len2 = round(df2['char_len'].mean(), 1) if not df2.empty else 0
     
-    # 2. 질문 빈도 (?)
     q1 = df1['message'].str.contains(r'\?|궁금|뭐해|어때|어디').sum()
     q2 = df2['message'].str.contains(r'\?|궁금|뭐해|어때|어디').sum()
     q_pct1 = round((q1 / max(1, cnt1)) * 100, 1)
     q_pct2 = round((q2 / max(1, cnt2)) * 100, 1)
     
-    # 3. ㅋ/ㅎ 및 이모티콘/하트 빈도
     lol1 = df1['message'].str.contains(r'ㅋ|ㅎ').sum()
     lol2 = df2['message'].str.contains(r'ㅋ|ㅎ').sum()
     
@@ -189,46 +193,35 @@ def analyze_romance_affection(df: pd.DataFrame):
     h1 = df1['message'].str.contains(heart_pattern).sum()
     h2 = df2['message'].str.contains(heart_pattern).sum()
     
-    # 4. 심야 대화 빈도 (밤 10시 ~ 새벽 2시)
     night1 = df1['hour'].apply(lambda x: 1 if (x >= 22 or x <= 2) else 0).sum()
     night2 = df2['hour'].apply(lambda x: 1 if (x >= 22 or x <= 2) else 0).sum()
     
-    # 5. 호감 / 데이트 약속 키워드 포착
     romantic_pattern = r'밥|맛있는|영화|카페|주말|만나|보고\s*싶|좋아|귀여|예쁘|멋지|잘\s*자'
     r1 = df1['message'].str.contains(romantic_pattern).sum()
     r2 = df2['message'].str.contains(romantic_pattern).sum()
     
-    # 호감도 점수 산출 알고리즘 (100점 만점)
-    # 지분율 균형(20점) + 평균 길이(15점) + 질문 비율(20점) + 애정 표현/하트(20점) + 데이트 키워드(15점) + 심야 대화(10점)
-    
     def calc_score(cnt, pct, avg_len, q_pct, hearts, romantic_cnt, night_cnt):
         sc = 0
-        # 지분율 균형 (40~60% 이상적)
         if 40 <= pct <= 60: sc += 20
         elif 30 <= pct <= 70: sc += 15
         else: sc += 10
         
-        # 평균 길이
         if avg_len >= 15: sc += 15
         elif avg_len >= 10: sc += 10
         else: sc += 5
         
-        # 질문 비율
         if q_pct >= 20: sc += 20
         elif q_pct >= 10: sc += 15
         else: sc += 8
         
-        # 하트/이모티콘
         if hearts >= 5: sc += 20
         elif hearts >= 2: sc += 15
         else: sc += 8
         
-        # 데이트/호감 키워드
         if romantic_cnt >= 5: sc += 15
         elif romantic_cnt >= 2: sc += 10
         else: sc += 5
         
-        # 심야 대화
         if night_cnt >= 3: sc += 10
         else: sc += 5
         
@@ -238,29 +231,29 @@ def analyze_romance_affection(df: pd.DataFrame):
     score2 = calc_score(cnt2, pct2, avg_len2, q_pct2, h2, r2, night2)
     mutual_score = round((score1 + score2) / 2)
 
-    # 호감도 등급 판단
     if mutual_score >= 88:
         status_text = "💘 서로 100% 그린라이트! 오늘 바로 고백각"
         status_color = "#DCFCE7"
-        status_desc = "두 분의 대화는 서로에 대한 애정과 관심이 넘쳐납니다. 서로 질문을 주고받으며 밤늦게까지 달달한 대화를 이어가는 완벽한 그린라이트입니다!"
+        status_desc = f"{s1}님과 {s2}님의 대화는 서로에 대한 애정과 관심이 넘쳐납니다. 완벽한 그린라이트입니다!"
     elif mutual_score >= 75:
         status_text = "💞 호감 충만! 연애 발전 가능성 85%"
         status_color = "#E0F2FE"
-        status_desc = "서로에 대한 호감이 뚜렷하며 긍정적인 신호가 자주 포착됩니다. 주말 데이트 약속을 잡아보시면 연인으로 발전할 확률이 매우 높습니다!"
+        status_desc = f"두 분 사이의 호감이 뚜렷하며 긍정적인 신호가 자주 포착됩니다. 주말 데이트 약속을 잡아보세요!"
     elif mutual_score >= 60:
         status_text = "👀 은근한 썸 단계! 살짝 더 직진해볼 타이밍"
         status_color = "#FEF9C3"
-        status_desc = "서로 호감은 있으나 아직 조심스러운 단계입니다. 상대방의 관심사나 주말 일정을 먼저 물어보며 한 걸음 더 다가가 보세요!"
+        status_desc = f"서로 호감은 있으나 아직 조심스러운 단계입니다. 먼저 가벼운 데이트나 약속을 제안해 보세요."
     elif mutual_score >= 45:
         status_text = "💬 편한 친구 이상 썸 이하! 밀당이 필요한 단계"
         status_color = "#F3E8FF"
-        status_desc = "대화는 이어지고 있지만 자발적인 호감 표현이나 질문 빈도가 다소 아쉽습니다. 대화의 주제를 공감대 위주로 바꿔보세요."
+        status_desc = "대화는 이어지고 있으나 자발적인 호감 표현이나 질문 빈도를 좀 더 늘려볼 필요가 있습니다."
     else:
         status_text = "🧊 아직은 어색한 사이! 공통 관심사 탐색 필요"
         status_color = "#F1F5F9"
-        status_desc = "대화 지분이나 답변 길이가 다소 짧거나 단답형일 수 있습니다. 부담스럽지 않은 가벼운 주제로 친밀도를 먼저 쌓아보세요."
+        status_desc = "대화 반응이 다소 아쉽습니다. 부담스럽지 않은 관심사 위주로 대화를 이끌어 보세요."
 
     return {
+        "senders": senders,
         "s1": s1, "s2": s2,
         "cnt1": cnt1, "cnt2": cnt2,
         "pct1": pct1, "pct2": pct2,
@@ -297,25 +290,36 @@ SAMPLE_FRIEND_CHAT = """[철수] [오후 2:10] 야 과제 다 했냐
 [영희] [오후 2:20] 오늘 밤 11시 59분까지임 얼른 해라
 [철수] [오후 2:22] ㅇㅋ 고맙다"""
 
+SAMPLE_GROUP_CHAT = """[민우] [오후 7:00] 얘들아 오늘 저녁 뭐 먹을까?
+[지은] [오후 7:01] 나 파스타 먹고 싶어!! 💕
+[수현] [오후 7:02] 난 삼겹살 고고
+[민우] [오후 7:03] 지은이가 파스타 먹고 싶다니까 파스타 먹으러 가자 ㅋㅋㅋ
+[지은] [오후 7:05] 대박 민우 최고!! 😍
+[수현] [오후 7:06] 아 뭐냐 둘이 ㅋㅋㅋ 나 빠져야 됨?
+[민우] [오후 7:08] 수현이 너도 같이 가야지 ㅋㅋㅋ 주말에 다 같이 보자!"""
+
 def render_kakao_romance_app():
     st.markdown("""
     <div class="kakao-header">
         <div class="kakao-title">💘 카톡 썸&연애 호감도 분석기</div>
-        <div class="kakao-sub">카카오톡 대화 내용으로 알아보는 우리 둘의 그린라이트 지수</div>
+        <div class="kakao-sub">카카오톡 대화 내용으로 알아보는 1:1 및 다자간 호감도 지수</div>
     </div>
     """, unsafe_allow_html=True)
 
     # 입력 모드 선택 & 파일/텍스트 입력
     st.markdown("##### 📝 카카오톡 대화 내용 입력")
 
-    btn_col1, btn_col2, btn_col3 = st.columns(3)
+    btn_col1, btn_col2, btn_col3, btn_col4 = st.columns(4)
     with btn_col1:
-        if st.button("🔥 썸 타는 대화 샘플", use_container_width=True):
+        if st.button("🔥 1:1 썸 대화", use_container_width=True):
             st.session_state.chat_input = SAMPLE_FLIRT_CHAT
     with btn_col2:
-        if st.button("💬 편한 친구 대화 샘플", use_container_width=True):
+        if st.button("💬 1:1 친구 대화", use_container_width=True):
             st.session_state.chat_input = SAMPLE_FRIEND_CHAT
     with btn_col3:
+        if st.button("👥 3인+ 단톡방 대화", use_container_width=True):
+            st.session_state.chat_input = SAMPLE_GROUP_CHAT
+    with btn_col4:
         if st.button("🧹 입력창 비우기", use_container_width=True):
             st.session_state.chat_input = ""
 
@@ -335,32 +339,41 @@ def render_kakao_romance_app():
         "카카오톡 대화 내용 (PC 복사본 또는 텍스트 내보내기)",
         value=st.session_state.chat_input,
         height=180,
-        help="카카오톡 대화 내용을 복사해서 붙여넣으세요. 예: [홍길동] [오후 10:00] 오늘 뭐해?"
+        help="카카오톡 대화 내용을 복사해서 붙여넣으세요. 2명 및 3명 이상 단톡방도 지원합니다."
     )
 
-    # 분석 실행 버튼
-    if st.button("🚀 **우리 둘의 호감도 분석하기**", type="primary", use_container_width=True):
-        if not chat_text.strip():
-            st.warning("⚠️ 대화 내용을 입력해 주세요!")
-            st.stop()
+    df_chat = parse_kakaotalk_chat(chat_text) if chat_text.strip() else pd.DataFrame()
+
+    if not df_chat.empty:
+        senders = list(df_chat['sender'].unique())
+        if len(senders) >= 2:
+            st.markdown("---")
+            if len(senders) > 2:
+                st.info(f"👥 **총 {len(senders)}명의 대화 참여자가 감지되었습니다!** ({', '.join(senders)})\n\n호감도를 분석할 두 대상을 지정하세요.")
             
-        df_chat = parse_kakaotalk_chat(chat_text)
-        
-        if df_chat.empty or len(df_chat['sender'].unique()) < 2:
-            st.error("❌ 2명 이상의 대화 내용을 인식하지 못했습니다.\n\n대화 형식이 `[이름] [시간] 내용` 또는 `이름 : 내용` 형식인지 확인해 주세요.")
-            st.stop()
-            
-        res = analyze_romance_affection(df_chat)
-        if not res:
-            st.error("❌ 대화 분석 중 오류가 발생했습니다.")
-            st.stop()
-            
-        st.session_state.analysis_result = res
-        st.session_state.df_chat = df_chat
-        st.toast("🎉 호감도 분석이 완료되었습니다!", icon="💘")
+            sel_col1, sel_col2 = st.columns(2)
+            with sel_col1:
+                target_s1 = st.selectbox("👤 분석 대상 1 (나 또는 상대방)", senders, index=0, key="target_s1_sel")
+            with sel_col2:
+                default_idx2 = 1 if len(senders) > 1 else 0
+                target_s2 = st.selectbox("👤 분석 대상 2 (상대방 또는 나)", senders, index=default_idx2, key="target_s2_sel")
+
+            if st.button("🚀 **선택한 대상 호감도 분석하기**", type="primary", use_container_width=True):
+                if target_s1 == target_s2:
+                    st.warning("⚠️ 서로 다른 두 사람을 선택해 주세요!")
+                else:
+                    res = analyze_romance_affection(df_chat, target_s1, target_s2)
+                    if res:
+                        st.session_state.analysis_result = res
+                        st.session_state.df_chat = df_chat
+                        st.toast(f"🎉 {target_s1} ❤️ {target_s2} 호감도 분석 완료!", icon="💘")
+                    else:
+                        st.error("❌ 분석 중 오류가 발생했습니다.")
+        else:
+            st.warning("⚠️ 2명 이상의 대화 참여자가 파싱되지 않았습니다. 대화 형식을 확인해 주세요.")
 
     # 분석 결과 리포트 렌더링
-    if "analysis_result" in st.session_state:
+    if "analysis_result" in st.session_state and "df_chat" in st.session_state:
         res = st.session_state.analysis_result
         df_chat = st.session_state.df_chat
         
@@ -369,7 +382,7 @@ def render_kakao_romance_app():
         # 1. 종합 호감도 점수 카드
         st.markdown(f"""
         <div class="score-card" style="background-color:{res['status_color']};">
-            <div style="font-size:1.1rem; font-weight:800; color:#1E293B;">💘 두 분의 종합 호감도 지수</div>
+            <div style="font-size:1.1rem; font-weight:800; color:#1E293B;">💘 [{res['s1']}] ❤️ [{res['s2']}] 1:1 호감도 지수</div>
             <div class="score-value">{res['mutual_score']}점</div>
             <div style="font-size:1.25rem; font-weight:800; color:#0F172A; margin-top:5px;">{res['status_text']}</div>
             <p style="font-size:0.9rem; color:#475569; margin-top:10px; line-height:1.5;">{res['status_desc']}</p>
@@ -394,17 +407,21 @@ def render_kakao_romance_app():
             """, unsafe_allow_html=True)
 
         # 탭 구성: 상세 분석
-        tab1, tab2, tab3 = st.tabs(["📊 대화 지분율 & 분석", "❤️ 애정 표현 & 이모티콘", "🌙 심야 대화 & 데이트 키워드"])
+        tab_list = ["📊 대화 지분율 & 분석", "❤️ 애정 표현 & 이모티콘", "🌙 심야 대화 & 데이트 키워드"]
+        if len(res['senders']) > 2:
+            tab_list.append("👥 단톡방 전체 대화량 분석")
+            
+        tabs = st.tabs(tab_list)
 
-        with tab1:
-            st.markdown("##### 💬 대화량 및 질문 지분율")
+        with tabs[0]:
+            st.markdown(f"##### 💬 [{res['s1']}] vs [{res['s2']}] 대화량 및 질문 지분율")
             
             # 지분율 차트
             df_pie = pd.DataFrame({
                 "sender": [res['s1'], res['s2']],
                 "count": [res['cnt1'], res['cnt2']]
             })
-            fig_pie = px.pie(df_pie, values='count', names='sender', title="대화 수 지분율 (%)",
+            fig_pie = px.pie(df_pie, values='count', names='sender', title=f"두 사람 간 대화 지분율 (%)",
                              color_discrete_sequence=['#EC4899', '#3B82F6'], hole=0.4)
             fig_pie.update_layout(height=280, margin=dict(l=10, r=10, t=40, b=10))
             st.plotly_chart(fig_pie, use_container_width=True)
@@ -414,7 +431,7 @@ def render_kakao_romance_app():
             - **{res['s2']}** 메시지 수: `{res['cnt2']}개` | 평균 글자수: `{res['avg_len2']}자` | 질문 비율: `{res['q_pct2']}%`
             """)
 
-        with tab2:
+        with tabs[1]:
             st.markdown("##### ❤️ 하트/이모티콘 & ㅋ/ㅎ 빈도 비교")
             df_emo = pd.DataFrame({
                 "이름": [res['s1'], res['s2']],
@@ -427,7 +444,7 @@ def render_kakao_romance_app():
             fig_bar.update_layout(height=300, margin=dict(l=10, r=10, t=40, b=10))
             st.plotly_chart(fig_bar, use_container_width=True)
 
-        with tab3:
+        with tabs[2]:
             st.markdown("##### 🌙 심야 대화 & 데이트 약속 모멘텀")
             st.markdown(f"""
             - **밤 10시 ~ 새벽 2시 대화 건수**:
@@ -442,5 +459,14 @@ def render_kakao_romance_app():
             else:
                 st.info("💡 주말 데이트나 맛집 이야기를 꺼내어 대화에 활력을 불어넣어 보세요.")
 
-render_kakao_romance_app()
+        if len(res['senders']) > 2 and len(tabs) > 3:
+            with tabs[3]:
+                st.markdown("##### 👥 단톡방 참여자 전체 대화 지분 순위")
+                df_group = df_chat['sender'].value_counts().reset_index()
+                df_group.columns = ['참여자', '메시지 수']
+                fig_group = px.bar(df_group, x='참여자', y='메시지 수', color='메시지 수',
+                                   color_continuous_scale='Viridis', title="전체 참여자 대화량 비교")
+                fig_group.update_layout(height=320, margin=dict(l=10, r=10, t=40, b=10))
+                st.plotly_chart(fig_group, use_container_width=True)
 
+render_kakao_romance_app()
