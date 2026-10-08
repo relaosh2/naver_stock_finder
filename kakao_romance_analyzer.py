@@ -8,12 +8,16 @@ from datetime import datetime
 # -----------------------------------------------------------------------------
 # 페이지 설정 & 커스텀 카카오 브랜딩 스타일링
 # -----------------------------------------------------------------------------
-st.set_page_config(
-    page_title="💘 카톡 썸&연애 호감도 분석기",
-    page_icon="💬",
-    layout="centered",
-    initial_sidebar_state="collapsed"
-)
+try:
+    st.set_page_config(
+        page_title="💘 카톡 썸&연애 호감도 분석기",
+        page_icon="💬",
+        layout="centered",
+        initial_sidebar_state="collapsed"
+    )
+except Exception:
+    pass
+
 
 st.markdown("""
 <style>
@@ -438,5 +442,5 @@ def render_kakao_romance_app():
             else:
                 st.info("💡 주말 데이트나 맛집 이야기를 꺼내어 대화에 활력을 불어넣어 보세요.")
 
-if __name__ == "__main__":
-    render_kakao_romance_app()
+render_kakao_romance_app()
+

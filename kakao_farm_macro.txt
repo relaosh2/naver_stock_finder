@@ -1,0 +1,263 @@
+/**
+ * [카카오톡 무한의 농장] AI 스마트 지능형 매크로 (AutoX.js v6 전용)
+ * 
+ * ✨ 주요 지능형 기능:
+ * 1. 📦 [상자 자동 오픈] : 밭에 떨어진 미개봉 상자들을 연속 탭하여 자동으로 깨부숨
+ * 2. 🔢 [OCR 번호/레벨 인식 자동 합성] :
+ *    - 내장 OCR로 밭 안의 작물 숫자(1, 2, 3...)를 실시간 스캔
+ *    - 같은 숫자가 2개 발견되면 자동으로 드래그(Swipe)해서 상위 작물로 합성!
+ * 3. ⚡ [원터치 파밍 & 수확] : 비어있는 밭 자동 터치 및 수확
+ */
+
+auto.waitFor(); // 접근성 권한 확인
+
+// 화면 캡처 권한 요청 (OCR 및 화면 인식을 위해 필수)
+if (!requestScreenCapture()) {
+    toast("화면 캡처 권한이 필요합니다.");
+    exit();
+}
+
+let width = device.width;
+let height = device.height;
+
+let isRunning = false;
+let macroThread = null;
+let currentMode = "smart"; // "smart" (상자깨기+번호인식합성), "fast" (초고속연타)
+
+// 밭 영역 (스마트폰 해상도 비율 자동 계산)
+let farmArea = {
+    left: Math.round(width * 0.1),
+    top: Math.round(height * 0.40),
+    right: Math.round(width * 0.9),
+    bottom: Math.round(height * 0.78)
+};
+
+// 플로팅 UI 생성
+let window = floaty.window(
+    <frame>
+        <card cardCornerRadius="16dp" cardElevation="8dp" contentPadding="10dp" cardBackgroundColor="#F8FFFFFF">
+            <vertical w="170dp" gravity="center">
+                <text text="🌾 무한의 농장 AI" textSize="14sp" textStyle="bold" textColor="#2C3E50" gravity="center" />
+                <text id="statusText" text="상태: 대기 중" textSize="11sp" textColor="#E74C3C" gravity="center" />
+                
+                <linear orientation="horizontal" w="*" gravity="center" marginTop="8dp">
+                    <button id="btnToggle" text="▶ AI 시작" w="75dp" h="40dp" textSize="12sp" textColor="#FFFFFF" bg="#2ECC71" />
+                    <button id="btnBox" text="📦 상자깨기" w="75dp" h="40dp" textSize="11sp" textColor="#FFFFFF" bg="#E67E22" marginLeft="4dp" />
+                </linear>
+
+                <linear orientation="horizontal" w="*" gravity="center" marginTop="4dp">
+                    <button id="btnMerge" text="🔢 번호합성" w="75dp" h="36dp" textSize="11sp" textColor="#FFFFFF" bg="#9B59B6" />
+                    <button id="btnClose" text="✕ 닫기" w="75dp" h="36dp" textSize="11sp" textColor="#FFFFFF" bg="#7F8C8D" marginLeft="4dp" />
+                </linear>
+            </vertical>
+        </card>
+    </frame>
+);
+
+window.setPosition(40, Math.round(height * 0.2));
+
+// 플로팅 윈도우 드래그 이동 설정
+let touchX, touchY, winX, winY, isMove = false;
+window.statusText.setOnTouchListener(function(v, e) {
+    if (e.getAction() == e.ACTION_DOWN) {
+        touchX = e.getRawX(); touchY = e.getRawY();
+        winX = window.getX(); winY = window.getY();
+        isMove = true; return true;
+    } else if (e.getAction() == e.ACTION_MOVE && isMove) {
+        window.setPosition(winX + (e.getRawX() - touchX), winY + (e.getRawY() - touchY));
+        return true;
+    } else if (e.getAction() == e.ACTION_UP) {
+        isMove = false; return true;
+    }
+    return false;
+});
+
+// 시작/정지 토글
+window.btnToggle.click(function() {
+    if (!isRunning) {
+        startSmartLoop();
+    } else {
+        stopLoop();
+    }
+});
+
+// 상자 깨기 단독 모드
+window.btnBox.click(function() {
+    stopLoop();
+    startBoxCracker();
+});
+
+// 번호 인식 합성 단독 모드
+window.btnMerge.click(function() {
+    stopLoop();
+    startNumberMerge();
+});
+
+window.btnClose.click(function() {
+    stopLoop();
+    window.close();
+    exit();
+});
+
+// [1] 상자 깨기 (상자 전 영역 고속 연타)
+function breakBoxes() {
+    // 밭 전체를 격자 형태로 빠르게 탭하여 나타난 상자를 모두 부숨
+    let cols = 4;
+    let rows = 4;
+    let stepX = (farmArea.right - farmArea.left) / cols;
+    let stepY = (farmArea.bottom - farmArea.top) / rows;
+
+    for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+            if (!isRunning) return;
+            let cx = farmArea.left + (c + 0.5) * stepX + random(-10, 10);
+            let cy = farmArea.top + (r + 0.5) * stepY + random(-10, 10);
+            // 연속 2회 탭 (상자 개봉)
+            press(cx, cy, 30);
+            sleep(40);
+            press(cx, cy, 30);
+            sleep(40);
+        }
+    }
+}
+
+// [2] OCR 화면 캡처 및 번호(레벨) 인식 후 동일 숫자 합성
+function mergeSameNumbers() {
+    let img = captureScreen();
+    if (!img) return;
+
+    // 농장 밭 영역만 이미지 크롭
+    let cropImg = images.clip(img, farmArea.left, farmArea.top, farmArea.right - farmArea.left, farmArea.bottom - farmArea.top);
+    
+    // OCR 텍스트 감지 (AutoX 내장 gmlkit / paddle OCR 사용)
+    let ocrResults = [];
+    try {
+        if (typeof gmlkit !== 'undefined' && gmlkit.ocr) {
+            ocrResults = gmlkit.ocr(cropImg, "zh").toArray();
+        } else if (typeof paddle !== 'undefined' && paddle.ocr) {
+            ocrResults = paddle.ocr(cropImg);
+        }
+    } catch (e) {
+        // OCR 에러 시 대비
+    }
+
+    cropImg.recycle();
+
+    // 감지된 숫자들 그룹화 (예: "1", "2", "3" ...)
+    let numberMap = {};
+    if (ocrResults && ocrResults.length > 0) {
+        for (let item of ocrResults) {
+            let txt = ("" + (item.text || "")).replace(/[^0-9]/g, "");
+            if (txt.length >= 1 && txt.length <= 3) { // 1~3자리 숫자
+                let b = item.bounds;
+                let actualX = farmArea.left + (b.left + b.right) / 2;
+                let actualY = farmArea.top + (b.top + b.bottom) / 2;
+
+                if (!numberMap[txt]) numberMap[txt] = [];
+                numberMap[txt].push({ x: actualX, y: actualY });
+            }
+        }
+    }
+
+    // 동일한 번호가 2개 이상 있는 작물 찾아 드래그 합성
+    let mergedCount = 0;
+    for (let num in numberMap) {
+        let list = numberMap[num];
+        while (list.length >= 2) {
+            if (!isRunning) return;
+            let itemA = list.pop();
+            let itemB = list.pop();
+
+            // A를 B로 드래그(Swipe)해서 합성!
+            swipe(itemA.x, itemA.y, itemB.x, itemB.y, 280);
+            sleep(350);
+            mergedCount++;
+        }
+    }
+
+    return mergedCount;
+}
+
+// [3] 스마트 통합 루프 (상자 깨기 ➔ 작물 심기 ➔ 같은 번호 감지 합성)
+function startSmartLoop() {
+    isRunning = true;
+    ui.run(function() {
+        window.statusText.setText("상태: AI 자동 운전 중");
+        window.statusText.setTextColor(colors.parseColor("#2ECC71"));
+        window.btnToggle.setText("⏸ 정지");
+        window.btnToggle.setBackgroundColor(colors.parseColor("#E74C3C"));
+    });
+
+    macroThread = threads.start(function() {
+        toast("무한의 농장 스마트 AI 자동 플레이 시작!");
+        while (isRunning) {
+            // 1단계: 상자 깨기 & 작물 생성 (밭 전체 탭)
+            breakBoxes();
+            sleep(300);
+
+            // 2단계: 번호 인식 및 동일 레벨 합성
+            let merged = mergeSameNumbers();
+            
+            // 번호 인식이 없더라도 밭 사이를 가볍게 스와이프 보조
+            if (!merged || merged === 0) {
+                let rx1 = random(farmArea.left, farmArea.left + 200);
+                let ry1 = random(farmArea.top, farmArea.bottom);
+                swipe(rx1, ry1, rx1 + 150, ry1, 200);
+            }
+            sleep(400);
+        }
+    });
+}
+
+// 상자 깨기 전용 루프
+function startBoxCracker() {
+    isRunning = true;
+    ui.run(function() {
+        window.statusText.setText("상태: 상자 깨는 중");
+        window.statusText.setTextColor(colors.parseColor("#E67E22"));
+        window.btnToggle.setText("⏸ 정지");
+        window.btnToggle.setBackgroundColor(colors.parseColor("#E74C3C"));
+    });
+
+    macroThread = threads.start(function() {
+        toast("상자 개봉 모드 시작");
+        while (isRunning) {
+            breakBoxes();
+            sleep(200);
+        }
+    });
+}
+
+// 번호 인식 합성 전용 루프
+function startNumberMerge() {
+    isRunning = true;
+    ui.run(function() {
+        window.statusText.setText("상태: 번호 인식 합성 중");
+        window.statusText.setTextColor(colors.parseColor("#9B59B6"));
+        window.btnToggle.setText("⏸ 정지");
+        window.btnToggle.setBackgroundColor(colors.parseColor("#E74C3C"));
+    });
+
+    macroThread = threads.start(function() {
+        toast("작물 번호 인식 자동 합성 모드 시작");
+        while (isRunning) {
+            mergeSameNumbers();
+            sleep(500);
+        }
+    });
+}
+
+function stopLoop() {
+    isRunning = false;
+    if (macroThread && macroThread.isAlive()) {
+        macroThread.interrupt();
+    }
+    ui.run(function() {
+        window.statusText.setText("상태: 대기 중");
+        window.statusText.setTextColor(colors.parseColor("#E74C3C"));
+        window.btnToggle.setText("▶ AI 시작");
+        window.btnToggle.setBackgroundColor(colors.parseColor("#2ECC71"));
+    });
+}
+
+setInterval(function() {}, 1000);
