@@ -313,46 +313,40 @@ def render_stock_card(row, is_watchlist_view=False):
     theme_html = ""
     if matched_themes:
         themes_str = ", ".join(matched_themes)
-        theme_html = f"""
-        <div style="background-color:#FFFBEB; color:#B45309; padding:4px 8px; border-radius:6px; font-size:0.8rem; font-weight:bold; margin-bottom:6px; border:1px solid #FDE68A;">
-            🔥 핫 트렌드 테마: {themes_str} (+{trend_score}점 가산)
-        </div>
-        """
+        theme_html = f'<div style="background-color:#FFFBEB; color:#B45309; padding:5px 10px; border-radius:6px; font-size:0.8rem; font-weight:bold; margin-bottom:8px; border:1px solid #FDE68A;">🔥 핫 트렌드 테마: {themes_str} (+{trend_score}점 가산)</div>'
+
+    card_html = f"""<div class="stock-card">
+<div class="stock-card-header">
+<div>
+<span class="stock-name">{name}</span>
+<span class="stock-code">({code}) • {row.get('market', 'KRX')}</span>
+</div>
+<div class="{badge_class}">{score}점 [{row['grade']}]</div>
+</div>
+{theme_html}
+<div style="background-color:{short_bg}; color:{short_tc}; padding:5px 10px; border-radius:6px; font-size:0.8rem; font-weight:bold; margin-bottom:8px;">📉 공매도·수급: {short_status}</div>
+<div class="metric-grid">
+<div class="metric-item">
+<div class="metric-label">현재가 / 최근거래량</div>
+<div class="metric-val" style="color:#EF4444;">{row['current_price']:,}원 <span style="font-size:0.75rem; color:#475569;">({vol_str})</span></div>
+</div>
+<div class="metric-item">
+<div class="metric-label">52주 최저 이격률</div>
+<div class="metric-val">+{row['diff_from_52w_low_pct']:.1f}%</div>
+</div>
+<div class="metric-item">
+<div class="metric-label">외인 3일 순매수</div>
+<div class="metric-val" style="color:#10B981;">{row['foreign_buy_3d']:+,}주</div>
+</div>
+<div class="metric-item">
+<div class="metric-label">기관 3일 순매수</div>
+<div class="metric-val" style="color:#10B981;">{row['organ_buy_3d']:+,}주</div>
+</div>
+</div>
+</div>"""
 
     with st.container():
-        st.markdown(f"""
-        <div class="stock-card">
-            <div class="stock-card-header">
-                <div>
-                    <span class="stock-name">{name}</span>
-                    <span class="stock-code">({code}) • {row.get('market', 'KRX')}</span>
-                </div>
-                <div class="{badge_class}">{score}점 [{row['grade']}]</div>
-            </div>
-            {theme_html}
-            <div style="background-color:{short_bg}; color:{short_tc}; padding:5px 10px; border-radius:6px; font-size:0.8rem; font-weight:bold; margin-bottom:8px;">
-                📉 공매도·수급: {short_status}
-            </div>
-            <div class="metric-grid">
-                <div class="metric-item">
-                    <div class="metric-label">현재가 / 최근거래량</div>
-                    <div class="metric-val" style="color:#EF4444;">{row['current_price']:,}원 <span style="font-size:0.75rem; color:#475569;">({vol_str})</span></div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-label">52주 최저 이격률</div>
-                    <div class="metric-val">+{row['diff_from_52w_low_pct']:.1f}%</div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-label">외인 3일 순매수</div>
-                    <div class="metric-val" style="color:#10B981;">{row['foreign_buy_3d']:+,}주</div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-label">기관 3일 순매수</div>
-                    <div class="metric-val" style="color:#10B981;">{row['organ_buy_3d']:+,}주</div>
-                </div>
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
+        st.markdown(card_html, unsafe_allow_html=True)
 
         w_col1, w_col2, w_col3 = st.columns([1.2, 1.2, 1.6])
         with w_col1:
@@ -393,12 +387,8 @@ def render_stock_card(row, is_watchlist_view=False):
                     st.markdown(f"- 📰 <a href='{n_url}' target='_blank' style='color:#2563EB; text-decoration:none; font-weight:600;'>{n_title} ↗</a>", unsafe_allow_html=True)
 
             st.markdown("##### 📉 공매도 & 숏커버링 종합 분석")
-            st.markdown(f"""
-            <div style="background-color:{short_bg}; padding:10px; border-radius:8px; border-left:4px solid {short_tc}; margin-bottom:10px;">
-                <strong style="color:{short_tc}; font-size:0.95rem;">{short_status}</strong><br>
-                <span style="font-size:0.85rem; color:#334155;">{short_desc}</span>
-            </div>
-            """, unsafe_allow_html=True)
+            short_html = f'<div style="background-color:{short_bg}; padding:10px; border-radius:8px; border-left:4px solid {short_tc}; margin-bottom:10px;"><strong style="color:{short_tc}; font-size:0.95rem;">{short_status}</strong><br><span style="font-size:0.85rem; color:#334155;">{short_desc}</span></div>'
+            st.markdown(short_html, unsafe_allow_html=True)
 
             st.markdown("##### 📊 수급 및 가치 지표")
             pbr_val = row.get('pbr')
