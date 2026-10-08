@@ -388,7 +388,9 @@ def render_stock_card(row, is_watchlist_view=False):
             if recent_news:
                 st.markdown("##### 📰 최신 트렌드 이슈 & 실시간 뉴스")
                 for news in recent_news:
-                    st.markdown(f"- 📰 <a href='{news[\"url\"]}' target='_blank' style='color:#2563EB; text-decoration:none; font-weight:600;'>{news[\"title\"]} ↗</a>", unsafe_allow_html=True)
+                    n_url = news.get('url', '')
+                    n_title = news.get('title', '')
+                    st.markdown(f"- 📰 <a href='{n_url}' target='_blank' style='color:#2563EB; text-decoration:none; font-weight:600;'>{n_title} ↗</a>", unsafe_allow_html=True)
 
             st.markdown("##### 📉 공매도 & 숏커버링 종합 분석")
             st.markdown(f"""
