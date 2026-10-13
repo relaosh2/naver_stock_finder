@@ -626,7 +626,8 @@ def render_stock_card(row, is_watchlist_view=False):
                     height=400, margin=dict(l=10, r=10, t=30, b=10),
                     showlegend=False, xaxis_rangeslider_visible=False
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, key=f"chart_{code}_{is_watchlist_view}")
+
 
 # -----------------------------------------------------------------------------
 # ⭐ 내 관심종목 상시 표출 영역
