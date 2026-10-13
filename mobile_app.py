@@ -452,32 +452,81 @@ def render_stock_card(row, is_watchlist_view=False):
     with st.container():
         st.markdown(card_html, unsafe_allow_html=True)
 
-        w_col1, w_col2, w_col3 = st.columns([1.2, 1.2, 1.6])
+        w_col1, w_col2, w_col3, w_col4 = st.columns([1.1, 1.1, 1.1, 1.2])
         with w_col1:
             if is_fav:
-                if st.button("⭐ 관심해제", key=f"fav_btn_{code}_{is_watchlist_view}", use_container_width=True):
+                if st.button("⭐ 해제", key=f"fav_btn_{code}_{is_watchlist_view}", use_container_width=True):
                     del st.session_state.watchlist[code]
                     save_watchlist(st.session_state.watchlist)
                     st.toast(f"🗑️ [{name}] 관심종목에서 삭제되었습니다.", icon="🗑️")
                     st.rerun()
             else:
-                if st.button("⭐ 관심추가", key=f"fav_btn_{code}_{is_watchlist_view}", use_container_width=True):
+                if st.button("⭐ 관심", key=f"fav_btn_{code}_{is_watchlist_view}", use_container_width=True):
                     st.session_state.watchlist[code] = row.to_dict() if hasattr(row, 'to_dict') else dict(row)
                     save_watchlist(st.session_state.watchlist)
                     st.toast(f"⭐ [{name}] 관심종목에 영구 저장되었습니다!", icon="⭐")
                     st.rerun()
         with w_col2:
-            if st.button("💬 카톡전송", key=f"k_btn_{code}_{is_watchlist_view}", use_container_width=True):
+            if st.button("💬 나에게", key=f"k_btn_{code}_{is_watchlist_view}", use_container_width=True, help="내 카카오톡으로 즉시 발송"):
                 tk = st.session_state.kakao_token if st.session_state.kakao_token else KAKAO_REST_API_KEY
                 row_dict = row.to_dict() if hasattr(row, 'to_dict') else dict(row)
                 ok, msg = send_kakao_stock_alert(tk, row_dict)
                 if ok:
-                    st.toast(f"✅ {name} 카카오톡 알림 발송 완료!", icon="💬")
+                    st.toast(f"✅ {name} 내 카카오톡 발송 완료!", icon="💬")
                 else:
                     st.error(msg)
         with w_col3:
+            share_key = f"share_open_{code}_{is_watchlist_view}"
+            if st.button("👥 친구공유", key=f"sh_btn_{code}_{is_watchlist_view}", use_container_width=True, help="다른 사람이나 단톡방에 카톡 전송"):
+                st.session_state[share_key] = not st.session_state.get(share_key, False)
+        with w_col4:
             naver_mobile_url = f"https://m.stock.naver.com/item/main.naver?code={code}"
             st.markdown(f'<a href="{naver_mobile_url}" target="_blank" class="naver-btn" style="margin-top:0; padding:6px 8px; font-size:0.8rem;">네이버증권 ↗</a>', unsafe_allow_html=True)
+
+        if st.session_state.get(f"share_open_{code}_{is_watchlist_view}", False):
+            reasons_txt = "\\n• ".join(row['reasons'][:3])
+            share_msg = (
+                f"📈 [바닥 반등 포착] {name} ({code})\\n"
+                f"• 반등점수: {score}점 [{row['grade']}]\\n"
+                f"• 현재가: {row['current_price']:,}원 (52주최저 +{row['diff_from_52w_low_pct']:.1f}%)\\n"
+                f"• 수급(3일): 외인 {row['foreign_buy_3d']:+,}주 / 기관 {row['organ_buy_3d']:+,}주\\n"
+                f"• 공매도: {short_status}\\n"
+                f"• 포착사유:\\n• {reasons_txt}\\n\\n"
+                f"👉 상세 차트: https://m.stock.naver.com/item/main.naver?code={code}"
+            )
+            share_html = f"""
+            <div style="background:#FFFBEB; border:1px solid #FDE68A; border-radius:10px; padding:10px; font-family:sans-serif;">
+                <div style="display:flex; gap:8px;">
+                    <button onclick="shareKakaoNative()" style="flex:1; background:#FEE500; color:#191919; border:none; padding:10px; border-radius:8px; font-weight:800; font-size:0.88rem; cursor:pointer;">
+                        💬 카톡 친구/단톡방 선택해서 보내기
+                    </button>
+                    <button onclick="copyShareText()" id="copyBtn" style="flex:1; background:#1E3A8A; color:white; border:none; padding:10px; border-radius:8px; font-weight:700; font-size:0.88rem; cursor:pointer;">
+                        📋 카톡 메시지 복사
+                    </button>
+                </div>
+            </div>
+            <script>
+            const msgText = `{share_msg}`;
+            function shareKakaoNative() {{
+                if (navigator.share) {{
+                    navigator.share({{
+                        title: '📈 [{name}] 바닥 반등 신호 포착!',
+                        text: msgText
+                    }}).catch(() => {{}});
+                }} else {{
+                    copyShareText();
+                    alert('메시지가 복사되었습니다! 카카오톡 채팅방에 붙여넣기(Ctrl+V) 하세요.');
+                }}
+            }}
+            function copyShareText() {{
+                navigator.clipboard.writeText(msgText).then(() => {{
+                    document.getElementById('copyBtn').innerText = '✅ 복사 완료! (카톡에 붙여넣기)';
+                }});
+            }}
+            </script>
+            """
+            components.html(share_html, height=70)
+
 
         with st.expander(f"🔍 **{name}** 상세 분석 & 차트 열기", expanded=False):
             st.markdown("##### 💡 포착 사유 & 반등 근거")
