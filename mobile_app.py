@@ -266,9 +266,13 @@ st.markdown("""
 
 
 # 카카오톡 로그인 연동 버튼
+if not st.session_state.kakao_token:
+    st.session_state.kakao_token = load_saved_kakao_token()
+
 kakao_login_url = f"https://kauth.kakao.com/oauth/authorize?client_id={KAKAO_REST_API_KEY}&redirect_uri={current_redirect_uri}&response_type=code&scope=talk_message"
 if not st.session_state.kakao_token:
-    st.markdown(f'<a href="{kakao_login_url}" target="_top" class="kakao-login-btn">💬 카카오톡 1초 로그인 연동하기 (터치 1번) ↗</a>', unsafe_allow_html=True)
+    st.markdown(f'<a href="{kakao_login_url}" target="_blank" class="kakao-login-btn">💬 카카오톡 1초 로그인 연동하기 (터치 1번) ↗</a>', unsafe_allow_html=True)
+
     if st.session_state.get("kakao_oauth_error"):
         err_txt = st.session_state.kakao_oauth_error
         st.error(f"⚠️ 카카오 토큰 발급 오류: {err_txt}")
