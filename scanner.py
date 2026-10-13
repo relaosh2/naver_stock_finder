@@ -7,7 +7,7 @@ from short_sale_analyzer import analyze_short_sale_status
 from trend_issue_analyzer import fetch_stock_trend_issues
 import time
 
-def scan_single_stock(row, min_volume: int = 10000):
+def scan_single_stock(row, min_volume: int = 10000, force_include: bool = False):
     code = str(row['code']).zfill(6)
     name = row.get('name', '')
     market = row.get('market', '')
@@ -25,17 +25,18 @@ def scan_single_stock(row, min_volume: int = 10000):
         
     # 거래량 필터 (최소 거래량 1만주 미만 극초저유동성 종목만 1차 제외)
     vol = tech_data.get('volume', 0)
-    if vol < min_volume:
+    if not force_include and vol < min_volume:
         return None
 
     # 52주 최저가 대비 너무 높게 오른 종목(예: +50% 초과)은 바닥 스캔에서 1차 패스
-    if tech_data.get('diff_from_52w_low_pct', 999) > 50.0:
+    if not force_include and tech_data.get('diff_from_52w_low_pct', 999) > 50.0:
         return None
         
     # 3. 네이버 수급 및 펀더멘털 조회
     naver_info = fetch_naver_stock_info(code)
-    if naver_info.get("is_restricted"):
+    if not force_include and naver_info.get("is_restricted"):
         return None  # 투자주의 / 투자경고 / 투자위험 / 관리종목 / 거래정지 2차 제외
+
     
     # 4. 최신 시장 트렌드 & 뉴스 이슈 감성 분석
     trend_info = fetch_stock_trend_issues(code)

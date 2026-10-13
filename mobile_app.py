@@ -11,13 +11,38 @@ import json
 
 from data_fetcher import get_stock_list, fetch_naver_stock_info, fetch_stock_ohlcv
 from technical_indicators import analyze_technical_indicators, calculate_rsi, calculate_bollinger_bands
-from scanner import run_stock_scan
+from scanner import run_stock_scan, scan_single_stock
 from kakao_notifier import send_kakao_stock_alert, KAKAO_REST_API_KEY, get_redirect_uri, exchange_code_for_tokens
+
+WATCHLIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "watchlist.json")
+
+def load_watchlist() -> dict:
+    if os.path.exists(WATCHLIST_FILE):
+        try:
+            with open(WATCHLIST_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {}
+
+def save_watchlist(watchlist_data: dict):
+    try:
+        with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
+            json.dump(
+                watchlist_data,
+                f,
+                ensure_ascii=False,
+                indent=2,
+                default=lambda x: x.item() if hasattr(x, "item") else str(x)
+            )
+    except Exception:
+        pass
 
 # -----------------------------------------------------------------------------
 # 비밀번호 설정 및 보안 로직
 # -----------------------------------------------------------------------------
 APP_PASSWORD = "6101fks!"
+
 
 st.set_page_config(
     page_title="📈 갓성호님의 바닥에서 난 잡아",
@@ -254,7 +279,7 @@ if 'scan_data' not in st.session_state:
 if 'active_preset' not in st.session_state:
     st.session_state.active_preset = "ALL"
 if 'watchlist' not in st.session_state:
-    st.session_state.watchlist = {}
+    st.session_state.watchlist = load_watchlist()
 
 # -----------------------------------------------------------------------------
 # 메인 뷰 선택 (스캔 vs 관심종목)
@@ -266,8 +291,10 @@ with v_col2:
     if show_watchlist and len(st.session_state.watchlist) > 0:
         if st.button("🗑️ 관심종목 전체 삭제", use_container_width=True):
             st.session_state.watchlist = {}
+            save_watchlist({})
             st.toast("🗑️ 관심종목이 모두 삭제되었습니다.", icon="🗑️")
             st.rerun()
+
 
 if not show_watchlist:
     # -----------------------------------------------------------------------------
@@ -396,12 +423,14 @@ def render_stock_card(row, is_watchlist_view=False):
             if is_fav:
                 if st.button("⭐ 관심해제", key=f"fav_btn_{code}_{is_watchlist_view}", use_container_width=True):
                     del st.session_state.watchlist[code]
+                    save_watchlist(st.session_state.watchlist)
                     st.toast(f"🗑️ [{name}] 관심종목에서 삭제되었습니다.", icon="🗑️")
                     st.rerun()
             else:
                 if st.button("⭐ 관심추가", key=f"fav_btn_{code}_{is_watchlist_view}", use_container_width=True):
                     st.session_state.watchlist[code] = row.to_dict() if hasattr(row, 'to_dict') else dict(row)
-                    st.toast(f"⭐ [{name}] 관심종목에 추가되었습니다!", icon="⭐")
+                    save_watchlist(st.session_state.watchlist)
+                    st.toast(f"⭐ [{name}] 관심종목에 영구 저장되었습니다!", icon="⭐")
                     st.rerun()
         with w_col2:
             if st.button("💬 카톡전송", key=f"k_btn_{code}_{is_watchlist_view}", use_container_width=True):
@@ -478,12 +507,61 @@ def render_stock_card(row, is_watchlist_view=False):
 # -----------------------------------------------------------------------------
 if show_watchlist:
     st.markdown(f"### ⭐ 내 관심종목 리스트 ({len(st.session_state.watchlist)}건)")
+
+    # 종목명 / 종목코드로 직접 검색하여 관심종목 추가하는 기능
+    with st.container():
+        st.markdown("##### ➕ 종목명 또는 종목코드로 관심종목 직접 추가")
+        add_col1, add_col2 = st.columns([2.2, 1.0])
+        with add_col1:
+            manual_query = st.text_input(
+                "종목명 또는 코드 입력",
+                placeholder="예: 씨젠, 신성델타테크, 삼성전자, 096530",
+                label_visibility="collapsed"
+            )
+        with add_col2:
+            if st.button("➕ 검색 추가", type="primary", use_container_width=True):
+                q = manual_query.strip()
+                if not q:
+                    st.warning("종목명이나 6자리 종목코드를 입력해주세요.")
+                else:
+                    with st.spinner(f"'{q}' 종목 데이터 및 공매도 현황 분석 중..."):
+                        df_all_stocks = get_stock_list("ALL")
+                        matched = df_all_stocks[
+                            (df_all_stocks['name'].str.contains(q, case=False, na=False)) |
+                            (df_all_stocks['code'] == q.zfill(6))
+                        ]
+                        if matched.empty:
+                            st.error(f"❌ '{q}'에 해당하는 종목을 찾을 수 없습니다.")
+                        else:
+                            target_row = matched.iloc[0].to_dict()
+                            analyzed = scan_single_stock(target_row, min_volume=0, force_include=True)
+                            if analyzed:
+                                st.session_state.watchlist[analyzed['code']] = analyzed
+                                save_watchlist(st.session_state.watchlist)
+                                st.toast(f"⭐ [{analyzed['name']}] 관심종목에 추가 및 저장되었습니다!", icon="⭐")
+                                st.rerun()
+                            else:
+                                st.error("❌ 종목 데이터를 불러오는 데 실패했습니다.")
+
+    if st.session_state.watchlist:
+        if st.button("🔄 관심종목 실시간 시세 & 공매도 일괄 새로고침", use_container_width=True):
+            with st.spinner("관심종목 최신 수급 및 공매도 현황 업데이트 중..."):
+                for c_code, c_item in list(st.session_state.watchlist.items()):
+                    updated = scan_single_stock(c_item, min_volume=0, force_include=True)
+                    if updated:
+                        st.session_state.watchlist[c_code] = updated
+                save_watchlist(st.session_state.watchlist)
+                st.toast("✅ 모든 관심종목이 최신 데이터로 업데이트되었습니다!", icon="🔄")
+                st.rerun()
+
+    st.markdown("---")
     if not st.session_state.watchlist:
-        st.info("⭐ 아직 관심종목이 등록되지 않았습니다.\n\n스캔 결과에서 종목 카드 상단의 **[⭐ 관심추가]** 버튼을 누르면 나만의 관심종목으로 저장할 수 있습니다!")
+        st.info("⭐ 아직 관심종목이 등록되지 않았습니다.\n\n위 검색창에서 종목명을 입력해 직접 추가하거나, 스캔 결과에서 **[⭐ 관심추가]** 버튼을 누르면 영구 저장됩니다!")
     else:
         for code, item in list(st.session_state.watchlist.items()):
             render_stock_card(item, is_watchlist_view=True)
 else:
+
     # -----------------------------------------------------------------------------
     # 스캔 실행 버튼
     # -----------------------------------------------------------------------------
