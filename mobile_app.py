@@ -496,10 +496,10 @@ def render_stock_card(row, is_watchlist_view=False):
         w_col1, w_col2, w_col3, w_col4 = st.columns([1, 1, 1, 1])
         with w_col1:
             if is_fav:
-                if st.button("⭐해제", key=f"fav_btn_{code}_{is_watchlist_view}", use_container_width=True):
+                if st.button("🗑️삭제", key=f"fav_btn_{code}_{is_watchlist_view}", use_container_width=True):
                     del st.session_state.watchlist[code]
                     save_watchlist(st.session_state.watchlist)
-                    st.toast(f"🗑️ [{name}] 관심종목 해제", icon="🗑️")
+                    st.toast(f"🗑️ [{name}] 관심종목 삭제 완료", icon="🗑️")
                     st.rerun()
             else:
                 if st.button("⭐관심", key=f"fav_btn_{code}_{is_watchlist_view}", use_container_width=True):
@@ -637,7 +637,7 @@ st.markdown(f"""<div class="summary-one-line" style="background:linear-gradient(
 <span style="font-size:0.78rem; font-weight:600;">영구 자동 저장됨</span>
 </div>""", unsafe_allow_html=True)
 
-add_col1, add_col2, add_col3 = st.columns([2.2, 0.9, 0.9])
+add_col1, add_col2, add_col3, add_col4 = st.columns([2.0, 0.75, 0.75, 0.75])
 with add_col1:
     manual_query = st.text_input(
         "관심종목 추가",
@@ -675,6 +675,13 @@ with add_col3:
                 save_watchlist(st.session_state.watchlist)
                 st.toast("✅ 관심종목 최신화 완료!", icon="🔄")
                 st.rerun()
+with add_col4:
+    if st.button("🗑️비우기", use_container_width=True, help="관심종목 전체 삭제"):
+        if st.session_state.watchlist:
+            st.session_state.watchlist = {}
+            save_watchlist({})
+            st.toast("🗑️ 관심종목 전체 삭제 완료!", icon="🗑️")
+            st.rerun()
 
 if st.session_state.watchlist:
     for code, item in list(st.session_state.watchlist.items()):
