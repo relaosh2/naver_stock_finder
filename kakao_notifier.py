@@ -7,6 +7,7 @@ from scanner import run_stock_scan
 
 # 사용자 등록 카카오 REST API 키 및 주소
 DEFAULT_KAKAO_KEY = "5bdff8c65268e9e854682507176f7b85"
+DEFAULT_CLIENT_SECRET = "CExMxLRJ6NrDW6gPG5mhHKROiwtulM34"
 DEFAULT_REDIRECT_URI = "https://realoshstock2.streamlit.app"
 
 KAKAO_TOKEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kakao_tokens.json")
@@ -14,8 +15,10 @@ KAKAO_TOKEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kak
 try:
     import streamlit as st
     KAKAO_REST_API_KEY = st.secrets.get("KAKAO_REST_API_KEY", DEFAULT_KAKAO_KEY)
+    KAKAO_CLIENT_SECRET = st.secrets.get("KAKAO_CLIENT_SECRET", DEFAULT_CLIENT_SECRET)
 except Exception:
     KAKAO_REST_API_KEY = DEFAULT_KAKAO_KEY
+    KAKAO_CLIENT_SECRET = DEFAULT_CLIENT_SECRET
 
 REDIRECT_URI = DEFAULT_REDIRECT_URI
 
@@ -97,6 +100,7 @@ def exchange_code_for_tokens(auth_code: str, redirect_uri: str = None) -> dict:
         data = {
             "grant_type": "authorization_code",
             "client_id": KAKAO_REST_API_KEY,
+            "client_secret": KAKAO_CLIENT_SECRET,
             "redirect_uri": uri_candidate,
             "code": auth_code
         }
@@ -109,7 +113,6 @@ def exchange_code_for_tokens(auth_code: str, redirect_uri: str = None) -> dict:
                 return token_data
             else:
                 last_err = f"({res.status_code}) {res.text}"
-                # KOE303 (redirect_uri mismatch)가 아니면 즉시 중단 (code는 1회성)
                 if "KOE303" not in res.text:
                     break
         except Exception as e:
@@ -137,6 +140,7 @@ def refresh_access_token(refresh_token: str = None) -> str:
     data = {
         "grant_type": "refresh_token",
         "client_id": KAKAO_REST_API_KEY,
+        "client_secret": KAKAO_CLIENT_SECRET,
         "refresh_token": refresh_token
     }
     try:
@@ -150,6 +154,7 @@ def refresh_access_token(refresh_token: str = None) -> str:
         return ""
     except Exception:
         return ""
+
 
 
 def send_kakao_stock_alert(access_token: str, stock: dict) -> tuple:
