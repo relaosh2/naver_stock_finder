@@ -7,8 +7,9 @@ from scanner import run_stock_scan
 
 # 사용자 등록 카카오 REST API 키 및 주소
 DEFAULT_KAKAO_KEY = "5bdff8c65268e9e854682507176f7b85"
-DEFAULT_CLIENT_SECRET = "CExMxLRJ6NrDW6gPG5mhHKROiwtulM34"
+DEFAULT_CLIENT_SECRET = "CExMxLRJ6NrDW6gPG5mhHKROiwtuIM34"
 DEFAULT_REDIRECT_URI = "https://realoshstock2.streamlit.app"
+
 
 KAKAO_TOKEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kakao_tokens.json")
 
