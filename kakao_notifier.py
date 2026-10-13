@@ -1,3 +1,4 @@
+import os
 import requests
 import json
 import time
@@ -8,6 +9,8 @@ from scanner import run_stock_scan
 DEFAULT_KAKAO_KEY = "5bdff8c65268e9e854682507176f7b85"
 DEFAULT_REDIRECT_URI = "https://realoshstock2.streamlit.app"
 
+KAKAO_TOKEN_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "kakao_tokens.json")
+
 try:
     import streamlit as st
     KAKAO_REST_API_KEY = st.secrets.get("KAKAO_REST_API_KEY", DEFAULT_KAKAO_KEY)
@@ -15,6 +18,34 @@ except Exception:
     KAKAO_REST_API_KEY = DEFAULT_KAKAO_KEY
 
 REDIRECT_URI = DEFAULT_REDIRECT_URI
+
+
+def save_kakao_tokens(tokens: dict):
+    """발급받은 카카오 토큰(access_token, refresh_token)을 파일에 영구 저장"""
+    try:
+        existing = {}
+        if os.path.exists(KAKAO_TOKEN_FILE):
+            with open(KAKAO_TOKEN_FILE, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+        existing.update(tokens)
+        existing["updated_at"] = datetime.now().isoformat()
+        with open(KAKAO_TOKEN_FILE, "w", encoding="utf-8") as f:
+            json.dump(existing, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+
+def load_saved_kakao_token() -> str:
+    """저장된 카카오 Access Token 로드 (만료 시 Refresh Token으로 자동 갱신 시도)"""
+    if not os.path.exists(KAKAO_TOKEN_FILE):
+        return ""
+    try:
+        with open(KAKAO_TOKEN_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("access_token", "")
+    except Exception:
+        return ""
+
 
 def get_redirect_uri() -> str:
     """
@@ -40,8 +71,10 @@ def get_redirect_uri() -> str:
 
     return DEFAULT_REDIRECT_URI.rstrip("/")
 
+
 # 오늘 이미 알림을 보낸 종목 코드 저장 (중복 알림 방지)
 alerted_today = set()
+
 
 def exchange_code_for_tokens(auth_code: str, redirect_uri: str = None) -> dict:
     """
@@ -50,28 +83,56 @@ def exchange_code_for_tokens(auth_code: str, redirect_uri: str = None) -> dict:
     if not redirect_uri:
         redirect_uri = get_redirect_uri()
     url = "https://kauth.kakao.com/oauth/token"
-    data = {
-        "grant_type": "authorization_code",
-        "client_id": KAKAO_REST_API_KEY,
-        "redirect_uri": redirect_uri,
-        "code": auth_code
-    }
-    try:
-        res = requests.post(url, data=data, timeout=5)
-        if res.status_code == 200:
-            return res.json()
-        else:
-            print(f"❌ 카카오 토큰 교환 실패 ({res.status_code}): {res.text}")
-            return {}
-    except Exception as e:
-        print(f"❌ 카카오 토큰 교환 에러: {e}")
-        return {}
+
+    # 슬래시 유무에 따른 호환성을 위해 순차 시도
+    base_uri = redirect_uri.rstrip("/")
+    candidates = [redirect_uri, base_uri, base_uri + "/"]
+    seen = []
+    for c in candidates:
+        if c not in seen:
+            seen.append(c)
+
+    last_err = ""
+    for uri_candidate in seen:
+        data = {
+            "grant_type": "authorization_code",
+            "client_id": KAKAO_REST_API_KEY,
+            "redirect_uri": uri_candidate,
+            "code": auth_code
+        }
+        try:
+            res = requests.post(url, data=data, timeout=5)
+            if res.status_code == 200:
+                token_data = res.json()
+                if token_data.get("access_token"):
+                    save_kakao_tokens(token_data)
+                return token_data
+            else:
+                last_err = f"({res.status_code}) {res.text}"
+                # KOE303 (redirect_uri mismatch)가 아니면 즉시 중단 (code는 1회성)
+                if "KOE303" not in res.text:
+                    break
+        except Exception as e:
+            last_err = str(e)
+            break
+
+    print(f"❌ 카카오 토큰 교환 실패: {last_err}")
+    return {"error": last_err}
 
 
-def refresh_access_token(refresh_token: str) -> str:
+def refresh_access_token(refresh_token: str = None) -> str:
     """
     Refresh Token을 사용하여 새 Access Token 갱신
     """
+    if not refresh_token and os.path.exists(KAKAO_TOKEN_FILE):
+        try:
+            with open(KAKAO_TOKEN_FILE, "r", encoding="utf-8") as f:
+                refresh_token = json.load(f).get("refresh_token", "")
+        except Exception:
+            pass
+    if not refresh_token:
+        return ""
+
     url = "https://kauth.kakao.com/oauth/token"
     data = {
         "grant_type": "refresh_token",
@@ -81,7 +142,11 @@ def refresh_access_token(refresh_token: str) -> str:
     try:
         res = requests.post(url, data=data, timeout=5)
         if res.status_code == 200:
-            return res.json().get("access_token", "")
+            token_data = res.json()
+            new_token = token_data.get("access_token", "")
+            if new_token:
+                save_kakao_tokens(token_data)
+            return new_token
         return ""
     except Exception:
         return ""
@@ -92,6 +157,11 @@ def send_kakao_stock_alert(access_token: str, stock: dict) -> tuple:
     카카오톡 '나에게 보내기' API를 사용하여 바닥 반등 포착 종목 알림 메시지 전송
     반환값: (성공여부: bool, 메세지: str)
     """
+    if not access_token or access_token == KAKAO_REST_API_KEY:
+        saved = load_saved_kakao_token()
+        if saved:
+            access_token = saved
+
     url = "https://kapi.kakao.com/v2/api/talk/memo/default/send"
     headers = {
         "Authorization": f"Bearer {access_token}",
@@ -112,7 +182,7 @@ def send_kakao_stock_alert(access_token: str, stock: dict) -> tuple:
     template = {
         "object_type": "feed",
         "content": {
-            "title": f"📈 [갓성호님의 바닥에서 난 잡아] 반등 신호 포착!",
+            "title": "📈 [갓성호님의 바닥에서 난 잡아] 반등 신호 포착!",
             "description": f"📌 {name} ({code})\n• 반등점수: {score}점 [{grade}]\n• 현재가: {price:,}원 (52주최저 대비 +{diff_low:.1f}%)\n• 외인 3일: {f_buy:+,}주 | 기관: {o_buy:+,}주\n\n💡 포착사유:\n• {reasons}",
             "image_url": "https://img.icons8.com/color/192/line-chart.png",
             "link": {
@@ -137,6 +207,13 @@ def send_kakao_stock_alert(access_token: str, stock: dict) -> tuple:
 
     try:
         res = requests.post(url, headers=headers, data=payload, timeout=5)
+        if res.status_code == 401:
+            # 토큰 만료 시 자동 리프레시 시도
+            refreshed = refresh_access_token()
+            if refreshed:
+                headers["Authorization"] = f"Bearer {refreshed}"
+                res = requests.post(url, headers=headers, data=payload, timeout=5)
+
         if res.status_code == 200:
             msg = f"✅ [{name}] 카카오톡 알림 전송 성공!"
             print(msg)

@@ -12,7 +12,14 @@ import json
 from data_fetcher import get_stock_list, fetch_naver_stock_info, fetch_stock_ohlcv
 from technical_indicators import analyze_technical_indicators, calculate_rsi, calculate_bollinger_bands
 from scanner import run_stock_scan, scan_single_stock
-from kakao_notifier import send_kakao_stock_alert, KAKAO_REST_API_KEY, get_redirect_uri, exchange_code_for_tokens
+from kakao_notifier import (
+    send_kakao_stock_alert,
+    KAKAO_REST_API_KEY,
+    get_redirect_uri,
+    exchange_code_for_tokens,
+    load_saved_kakao_token,
+    save_kakao_tokens
+)
 
 WATCHLIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "watchlist.json")
 
@@ -54,20 +61,33 @@ st.set_page_config(
 # 동적 Redirect URI 감지
 current_redirect_uri = get_redirect_uri()
 
-# 세션 인증 확인
+# 세션 인증 확인 및 저장된 카카오 토큰 자동 로드
 if "authenticated" not in st.session_state:
     st.session_state.authenticated = False
 if "kakao_token" not in st.session_state:
-    st.session_state.kakao_token = ""
+    st.session_state.kakao_token = load_saved_kakao_token()
+if "kakao_oauth_error" not in st.session_state:
+    st.session_state.kakao_oauth_error = ""
 
 # 카카오 OAuth Redirect Code 자동 인식 및 토큰 교환
 query_params = st.query_params
 if "code" in query_params:
     auth_code = query_params["code"]
+    # 카카오 로그인 인증 후 돌아온 경우 보안 로그인창을 다시 띄우지 않도록 즉시 인증 통과 처리
+    st.session_state.authenticated = True
     tokens = exchange_code_for_tokens(auth_code, redirect_uri=current_redirect_uri)
+    # 1회성 code 파라미터 즉시 제거 (새로고침 시 중복 호출 방지)
+    try:
+        st.query_params.clear()
+    except Exception:
+        pass
     if tokens.get("access_token"):
         st.session_state.kakao_token = tokens.get("access_token")
+        st.session_state.kakao_oauth_error = ""
         st.toast("🎉 카카오톡 계정이 성공적으로 연동되었습니다!", icon="💬")
+    elif tokens.get("error"):
+        st.session_state.kakao_oauth_error = tokens.get("error")
+
 
 # 모바일 PWA 메타 태그 & 커스텀 CSS 스타일링
 st.markdown("""
@@ -248,17 +268,18 @@ st.markdown("""
 # 카카오톡 로그인 연동 버튼
 kakao_login_url = f"https://kauth.kakao.com/oauth/authorize?client_id={KAKAO_REST_API_KEY}&redirect_uri={current_redirect_uri}&response_type=code&scope=talk_message"
 if not st.session_state.kakao_token:
-    st.markdown(f'<a href="{kakao_login_url}" target="_blank" class="kakao-login-btn">💬 카카오톡 1초 로그인 연동하기 (터치 1번) ↗</a>', unsafe_allow_html=True)
-    with st.expander("🛠️ 카카오 KOE006 오류 해결 방법 (최초 1회 10초 설정)"):
+    st.markdown(f'<a href="{kakao_login_url}" target="_top" class="kakao-login-btn">💬 카카오톡 1초 로그인 연동하기 (터치 1번) ↗</a>', unsafe_allow_html=True)
+    if st.session_state.get("kakao_oauth_error"):
+        err_txt = st.session_state.kakao_oauth_error
+        st.error(f"⚠️ 카카오 토큰 발급 오류: {err_txt}")
+        if "KOE010" in err_txt or "client_secret" in err_txt:
+            st.warning("💡 카카오 디벨로퍼스 [플랫폼 키] > [REST API 키] > **[클라이언트 시크릿]**에서 활성화 상태를 **'사용 안함(비활성화)'**으로 변경 후 다시 눌러주세요!")
+    with st.expander("🛠️ 카카오 연동 설정 안내 / 수동 토큰 입력"):
         st.markdown("""
 **`KOE006 (등록하지 않은 리다이렉트 URI)` 에러가 뜰 때 해결법:**
-1. 아래 **[카카오 디벨로퍼스 앱 관리 바로가기](https://developers.kakao.com/console/app)** 접속 ➡️ **`주식알림`** 앱 클릭
-2. 왼쪽 메뉴 **[앱 설정] > [플랫폼]** ➡️ **[Web 사이트 도메인]**에 아래 주소 등록:
-        """)
-        st.code("https://realoshstock2.streamlit.app", language="text")
-        st.markdown("""
-3. 왼쪽 메뉴 **[제품 설정] > [카카오 로그인]** 클릭 ➡️ **[활성화 설정] `ON`** 확인
-4. 하단 **[Redirect URI]** 등록 버튼 클릭 후 아래 주소 **2줄을 모두 복사해서 등록** 후 저장:
+1. **[카카오 디벨로퍼스 앱 관리](https://developers.kakao.com/console/app)** 접속 ➡️ **`주식알림`** 앱 클릭
+2. **[플랫폼 키]** 메뉴 ➡️ **`REST API 키`** 하단의 **`[로그인 리다이렉트 URI]`** 버튼 클릭
+3. 아래 주소 **2줄을 모두 등록** 후 저장:
         """)
         st.code("https://realoshstock2.streamlit.app\nhttps://realoshstock2.streamlit.app/", language="text")
         st.markdown("---")
@@ -266,9 +287,18 @@ if not st.session_state.kakao_token:
         if st.button("✅ 토큰 수동 적용", use_container_width=True):
             if manual_tk.strip():
                 st.session_state.kakao_token = manual_tk.strip()
+                save_kakao_tokens({"access_token": manual_tk.strip()})
                 st.rerun()
 else:
-    st.success("✅ 카카오톡 연동 완료! 종목 알림이 내 카카오톡으로 발송됩니다.")
+    k_col1, k_col2 = st.columns([3, 1])
+    with k_col1:
+        st.success("✅ 카카오톡 연동 완료! 종목 알림이 내 카카오톡으로 발송됩니다.")
+    with k_col2:
+        if st.button("🔄 재연동", use_container_width=True):
+            st.session_state.kakao_token = ""
+            save_kakao_tokens({"access_token": ""})
+            st.rerun()
+
 
 
 # -----------------------------------------------------------------------------
