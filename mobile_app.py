@@ -224,8 +224,27 @@ st.markdown("""
 kakao_login_url = f"https://kauth.kakao.com/oauth/authorize?client_id={KAKAO_REST_API_KEY}&redirect_uri={current_redirect_uri}&response_type=code&scope=talk_message"
 if not st.session_state.kakao_token:
     st.markdown(f'<a href="{kakao_login_url}" target="_blank" class="kakao-login-btn">💬 카카오톡 1초 로그인 연동하기 (터치 1번) ↗</a>', unsafe_allow_html=True)
+    with st.expander("🛠️ 카카오 KOE006 오류 해결 방법 (최초 1회 10초 설정)"):
+        st.markdown("""
+**`KOE006 (등록하지 않은 리다이렉트 URI)` 에러가 뜰 때 해결법:**
+1. 아래 **[카카오 디벨로퍼스 앱 관리 바로가기](https://developers.kakao.com/console/app)** 접속 ➡️ **`주식알림`** 앱 클릭
+2. 왼쪽 메뉴 **[앱 설정] > [플랫폼]** ➡️ **[Web 사이트 도메인]**에 아래 주소 등록:
+        """)
+        st.code("https://realoshstock2.streamlit.app", language="text")
+        st.markdown("""
+3. 왼쪽 메뉴 **[제품 설정] > [카카오 로그인]** 클릭 ➡️ **[활성화 설정] `ON`** 확인
+4. 하단 **[Redirect URI]** 등록 버튼 클릭 후 아래 주소 **2줄을 모두 복사해서 등록** 후 저장:
+        """)
+        st.code("https://realoshstock2.streamlit.app\nhttps://realoshstock2.streamlit.app/", language="text")
+        st.markdown("---")
+        manual_tk = st.text_input("🔑 또는 발급받은 Access Token 직접 입력", placeholder="액세스 토큰 붙여넣기")
+        if st.button("✅ 토큰 수동 적용", use_container_width=True):
+            if manual_tk.strip():
+                st.session_state.kakao_token = manual_tk.strip()
+                st.rerun()
 else:
     st.success("✅ 카카오톡 연동 완료! 종목 알림이 내 카카오톡으로 발송됩니다.")
+
 
 # -----------------------------------------------------------------------------
 # 세션 상태 관리
