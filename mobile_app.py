@@ -283,26 +283,6 @@ if not st.session_state.authenticated:
     st.stop()
 
 # -----------------------------------------------------------------------------
-# 상단 모드 선택 (주식 스캐너 vs 부조금 명단 조회)
-# -----------------------------------------------------------------------------
-app_mode = st.radio(
-    "메뉴 선택",
-    ["📈 주식 바닥 스캐너", "📋 부조금 명단 조회"],
-    horizontal=True,
-    label_visibility="collapsed"
-)
-
-if app_mode == "📋 부조금 명단 조회":
-    html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "buju_viewer.html")
-    if os.path.exists(html_path):
-        with open(html_path, "r", encoding="utf-8") as f:
-            html_code = f.read()
-        components.html(html_code, height=1350, scrolling=True)
-    else:
-        st.error("❌ buju_viewer.html 파일을 찾을 수 없습니다.")
-    st.stop()
-
-# -----------------------------------------------------------------------------
 # 모바일 메인 헤더
 # -----------------------------------------------------------------------------
 st.markdown("""
@@ -311,6 +291,7 @@ st.markdown("""
     <div class="mobile-sub">52주 최저가/과매도 + 외인·기관 수급 유입 + 거래량 급증 탐색</div>
 </div>
 """, unsafe_allow_html=True)
+
 
 
 # 카카오톡 로그인 연동 버튼
