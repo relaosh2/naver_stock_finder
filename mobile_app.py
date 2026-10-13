@@ -9,8 +9,9 @@ from datetime import datetime
 import json
 
 
-from data_fetcher import get_stock_list, fetch_naver_stock_info, fetch_stock_ohlcv
+from data_fetcher import get_stock_list, fetch_naver_stock_info, fetch_stock_ohlcv, fetch_market_briefing
 from technical_indicators import analyze_technical_indicators, calculate_rsi, calculate_bollinger_bands
+
 from scanner import run_stock_scan, scan_single_stock
 from kakao_notifier import (
     send_kakao_stock_alert,
@@ -353,6 +354,58 @@ else:
 
 
 # -----------------------------------------------------------------------------
+# 📊 실시간 코스피(KOSPI) · 코스닥(KOSDAQ) 증시 현황 브리핑
+# -----------------------------------------------------------------------------
+mkt_brief = fetch_market_briefing()
+kp = mkt_brief.get("KOSPI", {})
+kd = mkt_brief.get("KOSDAQ", {})
+
+kp_pct = kp.get("pct", 0.0)
+kd_pct = kd.get("pct", 0.0)
+kp_col = "#EF4444" if kp_pct > 0 else ("#3B82F6" if kp_pct < 0 else "#475569")
+kd_col = "#EF4444" if kd_pct > 0 else ("#3B82F6" if kd_pct < 0 else "#475569")
+kp_sign = "▲" if kp_pct > 0 else ("▼" if kp_pct < 0 else "-")
+kd_sign = "▲" if kd_pct > 0 else ("▼" if kd_pct < 0 else "-")
+
+briefing_html = f"""<div style="background:#FFFFFF; border:1px solid #CBD5E1; border-radius:12px; padding:12px; margin-bottom:12px; box-shadow:0 2px 5px rgba(0,0,0,0.04);">
+<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid #F1F5F9; padding-bottom:6px;">
+<span style="font-weight:800; font-size:0.95rem; color:#0F172A;">📊 실시간 국내 증시 브리핑</span>
+<span style="font-size:0.75rem; color:#64748B; background:#F1F5F9; padding:2px 8px; border-radius:12px; font-weight:600;">{kp.get('status', '실시간')} (단위: 억)</span>
+</div>
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:8px;">
+<div style="background:#F8FAFC; padding:8px 10px; border-radius:8px; border:1px solid #E2E8F0;">
+<div style="display:flex; justify-content:space-between; align-items:baseline;">
+<span style="font-weight:800; font-size:0.88rem; color:#1E293B;">코스피</span>
+<span style="font-weight:900; font-size:1.05rem; color:{kp_col};">{kp.get('close', '-')}</span>
+</div>
+<div style="text-align:right; font-size:0.78rem; font-weight:700; color:{kp_col}; margin-bottom:4px;">
+{kp_sign} {kp.get('change', '0')} ({kp_pct:+.2f}%)
+</div>
+<div style="font-size:0.72rem; color:#475569; border-top:1px dashed #E2E8F0; padding-top:4px;">
+개 <b>{kp.get('personal','0')}</b> · 외 <b>{kp.get('foreign','0')}</b> · 기 <b>{kp.get('organ','0')}</b>
+</div>
+</div>
+<div style="background:#F8FAFC; padding:8px 10px; border-radius:8px; border:1px solid #E2E8F0;">
+<div style="display:flex; justify-content:space-between; align-items:baseline;">
+<span style="font-weight:800; font-size:0.88rem; color:#1E293B;">코스닥</span>
+<span style="font-weight:900; font-size:1.05rem; color:{kd_col};">{kd.get('close', '-')}</span>
+</div>
+<div style="text-align:right; font-size:0.78rem; font-weight:700; color:{kd_col}; margin-bottom:4px;">
+{kd_sign} {kd.get('change', '0')} ({kd_pct:+.2f}%)
+</div>
+<div style="font-size:0.72rem; color:#475569; border-top:1px dashed #E2E8F0; padding-top:4px;">
+개 <b>{kd.get('personal','0')}</b> · 외 <b>{kd.get('foreign','0')}</b> · 기 <b>{kd.get('organ','0')}</b>
+</div>
+</div>
+</div>
+<div style="background:{mkt_brief.get('mood_bg', '#F8FAFC')}; color:{mkt_brief.get('mood_color', '#334155')}; padding:7px 10px; border-radius:8px; font-size:0.8rem; font-weight:700; line-height:1.4;">
+{mkt_brief.get('comment', '')}
+</div>
+</div>"""
+
+st.markdown(briefing_html, unsafe_allow_html=True)
+
+# -----------------------------------------------------------------------------
 # 세션 상태 관리
 # -----------------------------------------------------------------------------
 if 'scan_data' not in st.session_state:
@@ -361,6 +414,7 @@ if 'active_preset' not in st.session_state:
     st.session_state.active_preset = "ALL"
 if 'watchlist' not in st.session_state:
     st.session_state.watchlist = load_watchlist()
+
 
 # -----------------------------------------------------------------------------
 # 1줄 초간단 전략 프리셋

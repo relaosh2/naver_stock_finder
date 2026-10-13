@@ -178,3 +178,69 @@ def fetch_stock_ohlcv(code: str, days: int = 150) -> pd.DataFrame:
     except Exception:
         pass
     return None
+
+
+def fetch_market_briefing() -> dict:
+    """
+    실시간 코스피(KOSPI) / 코스닥(KOSDAQ) 지수 및 투자자별(개인/외인/기관) 매매동향 브리핑 수집
+    """
+    result = {}
+    for code in ["KOSPI", "KOSDAQ"]:
+        item = {
+            "close": "-",
+            "change": "0.00",
+            "pct": 0.0,
+            "status": "",
+            "personal": "0",
+            "foreign": "0",
+            "organ": "0"
+        }
+        try:
+            r_basic = requests.get(f"https://m.stock.naver.com/api/index/{code}/basic", headers=HEADERS, timeout=3)
+            if r_basic.status_code == 200:
+                b = r_basic.json()
+                item["close"] = b.get("closePrice", "-")
+                item["change"] = b.get("compareToPreviousClosePrice", "0.00")
+                try:
+                    item["pct"] = float(b.get("fluctuationsRatio", 0.0))
+                except Exception:
+                    item["pct"] = 0.0
+                item["status"] = "장중 실시간" if b.get("marketStatus") == "OPEN" else "장마감"
+
+            r_trend = requests.get(f"https://m.stock.naver.com/api/index/{code}/trend", headers=HEADERS, timeout=3)
+            if r_trend.status_code == 200:
+                t = r_trend.json()
+                item["personal"] = t.get("personalValue", "0")
+                item["foreign"] = t.get("foreignValue", "0")
+                item["organ"] = t.get("institutionalValue", "0")
+        except Exception:
+            pass
+        result[code] = item
+
+    # 시황 한줄 진단 생성
+    kp_pct = result.get("KOSPI", {}).get("pct", 0.0)
+    kd_pct = result.get("KOSDAQ", {}).get("pct", 0.0)
+    avg_pct = (kp_pct + kd_pct) / 2.0
+
+    if avg_pct <= -2.5:
+        comment = "🚨 지수 급락(투매) 구간! 우량주 과매도 바닥 줍줍 및 외인·기관 역발상 매집 종목에 주목하세요."
+        mood_bg = "#FEF2F2"
+        mood_color = "#B91C1C"
+    elif avg_pct <= -0.7:
+        comment = "📉 약세장 조정 흐름입니다. 지수 대비 하방 경직성이 강하고 기관·외인 수급이 유입되는 종목 위주로 대응하세요."
+        mood_bg = "#EFF6FF"
+        mood_color = "#1D4ED8"
+    elif avg_pct >= 1.2:
+        comment = "🔥 강세장 랠리 진행 중! 거래량이 터지며 바닥에서 고개를 드는 쌍끌이 수급 종목의 탄력이 강해집니다."
+        mood_bg = "#ECFDF5"
+        mood_color = "#047857"
+    else:
+        comment = "⚖️ 보합·종목별 차별화 장세입니다. 철저히 수급(외인·기관)과 저평가(저PBR) 바닥 시그널 위주로 선별 공략하세요."
+        mood_bg = "#F8FAFC"
+        mood_color = "#334155"
+
+    result["comment"] = comment
+    result["mood_bg"] = mood_bg
+    result["mood_color"] = mood_color
+    return result
+
