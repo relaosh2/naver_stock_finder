@@ -1,0 +1,19 @@
+name: Keep Streamlit apps awake
+
+on:
+  schedule:
+    - cron: '0 */8 * * *'
+  workflow_dispatch:
+  push:
+    branches:
+      - master
+
+jobs:
+  keep-alive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: gpenessot/streamlit-keep-alive@v1
+        with:
+          app-urls: |
+            https://realoshstock2.streamlit.app
+            https://kakao-romance.streamlit.app
