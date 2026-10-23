@@ -12,8 +12,18 @@ jobs:
   keep-alive:
     runs-on: ubuntu-latest
     steps:
-      - uses: gpenessot/streamlit-keep-alive@v1
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          app-urls: |
-            https://realoshstock2.streamlit.app
-            https://kakao-romance.streamlit.app
+          python-version: '3.10'
+
+      - name: Install Playwright
+        run: |
+          pip install playwright
+          playwright install --with-deps chromium
+
+      - name: Run wake-up script
+        run: python .github/scripts/wake_up.py
